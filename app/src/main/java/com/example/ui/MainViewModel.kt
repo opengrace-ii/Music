@@ -97,11 +97,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _showFullPlayer = MutableStateFlow(false)
     val showFullPlayer: StateFlow<Boolean> = _showFullPlayer.asStateFlow()
 
+    private val _prefilledUrl = MutableStateFlow<String?>(null)
+    val prefilledUrl: StateFlow<String?> = _prefilledUrl.asStateFlow()
+
     private val _userMessage = MutableStateFlow<String?>(null)
     val userMessage: StateFlow<String?> = _userMessage.asStateFlow()
 
+    private val _selectedTrackForLyrics = MutableStateFlow<Track?>(null)
+    val selectedTrackForLyrics: StateFlow<Track?> = _selectedTrackForLyrics.asStateFlow()
+
+    fun openLyrics(track: Track) { _selectedTrackForLyrics.value = track }
+    fun closeLyrics() { _selectedTrackForLyrics.value = null }
+
     init {
         refreshStorage()
+    }
+
+    fun handleSharedUrl(url: String) {
+        _prefilledUrl.value = url
+        _showDownloadDialog.value = true
     }
 
     fun onSearchQueryChange(query: String) {
@@ -112,8 +126,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _selectedTab.value = tab
     }
 
-    fun openDownloadDialog() { _showDownloadDialog.value = true }
-    fun closeDownloadDialog() { _showDownloadDialog.value = false }
+    fun openDownloadDialog(initialUrl: String? = null) {
+        _prefilledUrl.value = initialUrl
+        _showDownloadDialog.value = true
+    }
+    fun closeDownloadDialog() {
+        _prefilledUrl.value = null
+        _showDownloadDialog.value = false
+    }
 
     fun openYouTubeBrowser() { _showYouTubeBrowser.value = true }
     fun closeYouTubeBrowser() { _showYouTubeBrowser.value = false }
@@ -130,7 +150,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startDownload(url: String, saveToMusicFolder: Boolean = true, bitrateKbps: Int = 192) {
+    fun startDownload(
+        url: String,
+        saveToMusicFolder: Boolean = true,
+        bitrateKbps: Int = 192,
+        capturedStreamUrl: String? = null
+    ) {
         if (url.isBlank()) {
             _userMessage.value = "Please enter a valid YouTube or audio link."
             return
@@ -146,7 +171,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val track = downloader.downloadAudio(
                     mediaInfo = mediaInfo,
                     saveToPublicMusic = saveToMusicFolder,
-                    bitrateKbps = bitrateKbps
+                    bitrateKbps = bitrateKbps,
+                    capturedStreamUrl = capturedStreamUrl
                 ) { progress, status ->
                     _downloadProgress.value = progress
                     _downloadStatus.value = status
@@ -154,6 +180,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 trackDao.insertTrack(TrackEntity.fromDomain(track))
                 _userMessage.value = "✓ Successfully converted & saved \"${track.title}\""
+                _prefilledUrl.value = null
                 _showDownloadDialog.value = false
                 _showYouTubeBrowser.value = false
                 refreshStorage()

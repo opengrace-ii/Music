@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "OGM"
+rootProject.name = "Open Grace Music"
 
 include(":app")

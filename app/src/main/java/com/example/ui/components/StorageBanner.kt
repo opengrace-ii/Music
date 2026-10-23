@@ -10,7 +10,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -19,9 +18,11 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.StorageInfo
-import com.example.ui.theme.InkDark
-import com.example.ui.theme.InkSoft
-import com.example.ui.theme.PeachSoft
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.SageGreen
+import com.example.ui.theme.TextLight
+import com.example.ui.theme.TextMuted
 
 @Composable
 fun StorageBanner(
@@ -32,17 +33,17 @@ fun StorageBanner(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(PeachSoft)
-            .border(1.dp, Color(0xFFF3CBB0), RoundedCornerShape(12.dp))
+            .background(DarkCard)
+            .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 9.dp)
             .testTag("storage_banner")
     ) {
         val text = buildAnnotatedString {
-            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = InkDark)) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold, color = TextLight)) {
                 append("Protected offline storage")
             }
             append(" granted · ")
-            withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = InkSoft)) {
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = SageGreen)) {
                 append("${storageInfo.formattedUsed} of ${storageInfo.formattedTotal} used")
             }
             append(" · library stays on this device")
@@ -50,8 +51,8 @@ fun StorageBanner(
 
         Text(
             text = text,
-            fontSize = 12.5.sp,
-            color = InkSoft,
+            fontSize = 12.sp,
+            color = TextMuted,
             lineHeight = 17.sp
         )
     }

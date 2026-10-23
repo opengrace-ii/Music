@@ -59,6 +59,13 @@ data class PlayerState(
 class OgmPlayer(private val context: Context) {
     companion object {
         private const val TAG = "OgmPlayer"
+        @Volatile
+        var activeInstance: OgmPlayer? = null
+            private set
+    }
+
+    init {
+        activeInstance = this
     }
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
@@ -147,6 +154,8 @@ class OgmPlayer(private val context: Context) {
                 errorMessage = null
             )
 
+            OgmPlaybackService.updateNotification(context, track.title, track.artist, true)
+
             startProgressUpdates()
         } catch (e: Exception) {
             Log.e(TAG, "Error playing track: ${track.title}", e)
@@ -170,10 +179,12 @@ class OgmPlayer(private val context: Context) {
         if (mp.isPlaying) {
             mp.pause()
             _playerState.value = current.copy(isPlaying = false)
+            current.currentTrack?.let { OgmPlaybackService.updateNotification(context, it.title, it.artist, false) }
             stopProgressUpdates()
         } else {
             mp.start()
             _playerState.value = current.copy(isPlaying = true)
+            current.currentTrack?.let { OgmPlaybackService.updateNotification(context, it.title, it.artist, true) }
             startProgressUpdates()
         }
     }
@@ -291,5 +302,9 @@ class OgmPlayer(private val context: Context) {
         stopProgressUpdates()
         mediaPlayer?.release()
         mediaPlayer = null
+        if (activeInstance == this) {
+            activeInstance = null
+        }
+        OgmPlaybackService.stopService(context)
     }
 }

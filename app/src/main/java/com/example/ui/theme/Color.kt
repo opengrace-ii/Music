@@ -2,33 +2,41 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Warm Peach & Cream Palette for OGM (Open Grace Music)
-val PeachPrimary = Color(0xFFEF8B57)
-val PeachDark = Color(0xFFD46E3A)
-val PeachLight = Color(0xFFFBAB76)
-val PeachSoft = Color(0xFFFFE8D9)
-val PeachContainer = Color(0xFFFFDBC8)
-val OnPeachPrimary = Color(0xFFFFFFFF)
+// Exact Dark Sage & Charcoal Palette from https://ogm-open-grace-music-w3bpvx.v2.appdeploy.ai/
+val DarkBg = Color(0xFF111411)            // Deep dark background
+val DarkCard = Color(0xFF181C18)          // Card container
+val DarkCardBorder = Color(0xFF282E27)    // Subtle borders
+val DarkCardHover = Color(0xFF212720)     // Active card surface
 
-val CreamBackground = Color(0xFFFFF8F3)
-val CreamSurface = Color(0xFFFFFFFF)
-val CreamSurfaceVariant = Color(0xFFFFF0E5)
+// Sage Green Brand Accents
+val SageGreen = Color(0xFFB8D99E)         // Primary sage green
+val SageGreenDark = Color(0xFF8AA874)     // Secondary sage
+val SageGreenDeep = Color(0xFF2B3626)     // Sage badge/container background
+val SageGreenMuted = Color(0xFF43543B)    // Disc groove border
+val OnSageGreen = Color(0xFF0F150C)       // Dark text on sage green
 
-val InkDark = Color(0xFF2E1A0E)
-val InkMedium = Color(0xFF573E2E)
-val InkSoft = Color(0xFF7A5C48)
-val InkLight = Color(0xFFA68772)
+// Text Tokens
+val TextLight = Color(0xFFF1F5EC)         // Main white/cream text
+val TextMuted = Color(0xFFA2ACA0)         // Secondary muted text
+val TextSubtle = Color(0xFF6F796E)        // Tertiary timestamps/sizes
 
-val StatusGreen = Color(0xFF2E9E5B)
-val StatusGreenBg = Color(0xFFE3F5EA)
-val StatusAmber = Color(0xFFC77700)
-val StatusAmberBg = Color(0xFFFCEFD8)
-val StatusRed = Color(0xFFC0392B)
-val StatusRedBg = Color(0xFFFBE3DF)
+// Status Badges
+val BadgeGreen = Color(0xFF86EFAC)
+val BadgeGreenBg = Color(0xFF1B2B1E)
+val BadgeAmber = Color(0xFFFBBF24)
+val BadgeAmberBg = Color(0xFF2E2713)
 
-// Dark theme counterparts
-val DarkBackground = Color(0xFF1B1410)
-val DarkSurface = Color(0xFF261D17)
-val DarkSurfaceVariant = Color(0xFF332720)
-val DarkInkPrimary = Color(0xFFFCEFE7)
-val DarkInkSecondary = Color(0xFFCBB6A8)
+// Backward-compatibility aliases
+val CreamBackground = DarkBg
+val CreamSurface = DarkCard
+val CreamSurfaceVariant = DarkCardHover
+val PeachPrimary = SageGreen
+val PeachSoft = SageGreenDeep
+val PeachDark = SageGreenDark
+val InkDark = TextLight
+val InkMedium = TextMuted
+val InkSoft = TextSubtle
+val StatusGreen = BadgeGreen
+val StatusGreenBg = BadgeGreenBg
+val StatusAmber = BadgeAmber
+val StatusAmberBg = BadgeAmberBg

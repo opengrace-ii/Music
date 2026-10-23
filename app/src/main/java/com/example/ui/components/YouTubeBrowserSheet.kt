@@ -1,12 +1,18 @@
 package com.example.ui.components
 
 import android.annotation.SuppressLint
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.view.ViewGroup
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -22,11 +28,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
@@ -48,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -56,23 +63,28 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.ui.theme.CreamBackground
-import com.example.ui.theme.InkDark
-import com.example.ui.theme.InkSoft
-import com.example.ui.theme.PeachPrimary
+import com.example.ui.theme.DarkBg
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.OnSageGreen
+import com.example.ui.theme.SageGreen
+import com.example.ui.theme.SageGreenDeep
+import com.example.ui.theme.TextLight
+import com.example.ui.theme.TextMuted
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubeBrowserSheet(
     onClose: () -> Unit,
-    onConvertVideo: (String) -> Unit
+    onConvertVideo: (String, String?) -> Unit
 ) {
+    val context = LocalContext.current
     var currentUrl by remember { mutableStateOf("https://m.youtube.com") }
     var currentTitle by remember { mutableStateOf("YouTube Music & Videos") }
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var capturedStreamUrl by remember { mutableStateOf<String?>(null) }
 
-    val isVideoPage = currentUrl.contains("watch?v=") || currentUrl.contains("youtu.be/")
+    val isVideoPage = currentUrl.contains("watch?v=") || currentUrl.contains("youtu.be/") || currentUrl.contains("/shorts/")
 
     BackHandler {
         if (webViewInstance?.canGoBack() == true) {
@@ -88,7 +100,7 @@ fun YouTubeBrowserSheet(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = CreamBackground
+            color = DarkBg
         ) {
             Column(
                 modifier = Modifier
@@ -100,7 +112,7 @@ fun YouTubeBrowserSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color.White)
+                        .background(DarkCard)
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -108,7 +120,7 @@ fun YouTubeBrowserSheet(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close Browser",
-                            tint = InkDark
+                            tint = TextLight
                         )
                     }
 
@@ -119,7 +131,7 @@ fun YouTubeBrowserSheet(
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back",
-                            tint = if (webViewInstance?.canGoBack() == true) InkDark else Color.LightGray
+                            tint = if (webViewInstance?.canGoBack() == true) TextLight else TextMuted
                         )
                     }
 
@@ -132,16 +144,33 @@ fun YouTubeBrowserSheet(
                             text = currentTitle,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = InkDark,
+                            color = TextLight,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = currentUrl,
                             fontSize = 10.sp,
-                            color = InkSoft,
+                            color = TextMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    // Copy URL Button (Provision to directly copy URL from YouTube)
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("YouTube URL", currentUrl)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "✓ Copied YouTube URL to clipboard", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.testTag("copy_yt_url_btn")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = "Copy YouTube URL",
+                            tint = SageGreen
                         )
                     }
 
@@ -149,8 +178,29 @@ fun YouTubeBrowserSheet(
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Refresh",
-                            tint = InkDark
+                            tint = TextLight
                         )
+                    }
+
+                    // Direct Save Button in Header if on video page
+                    if (isVideoPage) {
+                        Button(
+                            onClick = { onConvertVideo(currentUrl, capturedStreamUrl) },
+                            colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
+                            shape = RoundedCornerShape(999.dp),
+                            modifier = Modifier
+                                .padding(start = 4.dp)
+                                .testTag("header_convert_btn")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = null,
+                                tint = OnSageGreen,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Save", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = OnSageGreen)
+                        }
                     }
                 }
 
@@ -161,15 +211,15 @@ fun YouTubeBrowserSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(2.dp),
-                        color = PeachPrimary
+                        color = SageGreen
                     )
                 }
 
                 // Main Webview
                 Box(modifier = Modifier.weight(1f)) {
                     AndroidView(
-                        factory = { context ->
-                            WebView(context).apply {
+                        factory = { ctx ->
+                            WebView(ctx).apply {
                                 layoutParams = ViewGroup.LayoutParams(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -190,6 +240,19 @@ fun YouTubeBrowserSheet(
                                         url?.let { currentUrl = it }
                                         view?.title?.let { currentTitle = it }
                                     }
+
+                                    override fun shouldInterceptRequest(
+                                        view: WebView?,
+                                        request: WebResourceRequest?
+                                    ): WebResourceResponse? {
+                                        val reqUrl = request?.url?.toString() ?: ""
+                                        if (reqUrl.contains("googlevideo.com/videoplayback") &&
+                                            (reqUrl.contains("mime=audio") || reqUrl.contains("audio/"))
+                                        ) {
+                                            capturedStreamUrl = reqUrl
+                                        }
+                                        return super.shouldInterceptRequest(view, request)
+                                    }
                                 }
 
                                 webChromeClient = object : WebChromeClient() {
@@ -209,54 +272,56 @@ fun YouTubeBrowserSheet(
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Bottom Floating Action Banner when a video is loaded
-                    Card(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(16.dp)
-                            .testTag("convert_current_video_card"),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-                    ) {
-                        Row(
+                    // Bottom Floating Action Banner when video is detected
+                    if (isVideoPage) {
+                        Card(
                             modifier = Modifier
+                                .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                                .padding(16.dp)
+                                .testTag("convert_current_video_card"),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = DarkCard),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (isVideoPage) "Music Video Detected!" else "Browse & find your music",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = InkDark
-                                )
-                                Text(
-                                    text = if (isVideoPage) "Tap to convert & save as MP3 to phone" else "Log in or open any music video",
-                                    fontSize = 11.sp,
-                                    color = InkSoft
-                                )
-                            }
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Button(
-                                onClick = { onConvertVideo(currentUrl) },
-                                enabled = isVideoPage,
-                                colors = ButtonDefaults.buttonColors(containerColor = PeachPrimary),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.testTag("convert_current_video_button")
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Download,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Save MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "YouTube Music Video Ready",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextLight
+                                    )
+                                    Text(
+                                        text = "Convert & download directly into phone's Music folder",
+                                        fontSize = 11.sp,
+                                        color = TextMuted
+                                    )
+                                }
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Button(
+                                    onClick = { onConvertVideo(currentUrl, capturedStreamUrl) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
+                                    shape = RoundedCornerShape(999.dp),
+                                    modifier = Modifier.testTag("convert_current_video_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Download,
+                                        contentDescription = null,
+                                        tint = OnSageGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Save MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OnSageGreen)
+                                }
                             }
                         }
                     }

@@ -42,9 +42,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,15 +53,20 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.components.DownloadDialog
 import com.example.ui.components.FullPlayerDialog
+import com.example.ui.components.LyricsDialog
 import com.example.ui.components.NowPlayingBar
 import com.example.ui.components.StorageBanner
 import com.example.ui.components.TrackCard
 import com.example.ui.components.YouTubeBrowserSheet
-import com.example.ui.theme.CreamBackground
-import com.example.ui.theme.InkDark
-import com.example.ui.theme.InkSoft
-import com.example.ui.theme.PeachPrimary
-import com.example.ui.theme.PeachSoft
+import androidx.compose.ui.graphics.Color
+import com.example.ui.theme.PlayfairDisplayFontFamily
+import com.example.ui.theme.DarkBg
+import com.example.ui.theme.OnSageGreen
+import com.example.ui.theme.SageGreen
+import com.example.ui.theme.SageGreenDeep
+import com.example.ui.theme.TextLight
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextSubtle
 
 @Composable
 fun OgmApp(
@@ -76,7 +82,9 @@ fun OgmApp(
     val showDownloadDialog by viewModel.showDownloadDialog.collectAsState()
     val showYouTubeBrowser by viewModel.showYouTubeBrowser.collectAsState()
     val showFullPlayer by viewModel.showFullPlayer.collectAsState()
+    val selectedTrackForLyrics by viewModel.selectedTrackForLyrics.collectAsState()
     val userMessage by viewModel.userMessage.collectAsState()
+    val prefilledUrl by viewModel.prefilledUrl.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -97,7 +105,7 @@ fun OgmApp(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = CreamBackground,
+        containerColor = DarkBg,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             AnimatedVisibility(
@@ -123,7 +131,7 @@ fun OgmApp(
                 .padding(innerPadding)
                 .statusBarsPadding()
         ) {
-            // Header (.app-header)
+            // Header (.app-header) matching web layout
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -135,19 +143,20 @@ fun OgmApp(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    // Brand Logo (.brand-logo: 46x46, border-radius 12px)
+                    // Brand Logo Emblem
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .shadow(4.dp, RoundedCornerShape(12.dp))
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(PeachPrimary),
+                            .size(48.dp)
+                            .shadow(8.dp, RoundedCornerShape(13.dp), ambientColor = SageGreen, spotColor = Color.Black)
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(Color(0xFF141813))
+                            .border(1.dp, Color(0x33B8D99E), RoundedCornerShape(13.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_ogm_logo),
-                            contentDescription = "OGM Logo",
-                            modifier = Modifier.size(46.dp)
+                            contentDescription = "Open Grace Music Logo",
+                            modifier = Modifier.size(48.dp)
                         )
                     }
 
@@ -155,25 +164,26 @@ fun OgmApp(
 
                     Column {
                         Text(
-                            text = "OGM",
-                            fontSize = 21.sp,
+                            text = "Open Grace Music",
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = InkDark,
-                            letterSpacing = 0.6.sp
+                            fontFamily = PlayfairDisplayFontFamily,
+                            color = TextLight,
+                            letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = "Open Grace Music · your personal music space",
-                            fontSize = 11.8.sp,
-                            color = InkSoft
+                            text = "Your personal music space · hymns & acoustics",
+                            fontSize = 11.sp,
+                            color = TextMuted
                         )
                     }
                 }
 
-                // YouTube In-App Browser Quick Button
+                // In-App YouTube Browser button
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(999.dp))
-                        .background(PeachSoft)
+                        .background(SageGreenDeep)
                         .clickable { viewModel.openYouTubeBrowser() }
                         .padding(horizontal = 12.dp, vertical = 7.dp)
                         .testTag("youtube_browser_btn"),
@@ -183,33 +193,37 @@ fun OgmApp(
                         text = "YouTube ➔",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        color = PeachPrimary
+                        color = SageGreen
                     )
                 }
             }
 
-            // Storage Banner (.storage-banner)
-            StorageBanner(
-                storageInfo = storageInfo,
+            // Headline: "Your music. Your quiet place." in Playfair Display
+            Text(
+                text = "Your music. Your quiet place.",
+                fontSize = 15.sp,
+                fontStyle = FontStyle.Italic,
+                fontFamily = PlayfairDisplayFontFamily,
+                color = TextLight,
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Action Buttons (.actions: ＋ Import audio files, 🔗 Import from URL)
+            // Action Buttons
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Primary Pill: ＋ Import audio files
+                // Primary: Import audio files
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .shadow(6.dp, RoundedCornerShape(999.dp), ambientColor = PeachPrimary, spotColor = PeachPrimary)
+                        .shadow(6.dp, RoundedCornerShape(999.dp), ambientColor = SageGreen, spotColor = SageGreen)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(PeachPrimary)
+                        .background(SageGreen)
                         .clickable { filePickerLauncher.launch("audio/*") }
                         .padding(vertical = 12.dp)
                         .testTag("importBtn"),
@@ -217,70 +231,76 @@ fun OgmApp(
                 ) {
                     Text(
                         text = "＋ Import audio files",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = OnSageGreen
                     )
                 }
 
-                // Ghost Pill: 🔗 Import from URL
+                // Secondary: Import from URL
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clip(RoundedCornerShape(999.dp))
-                        .border(2.dp, PeachPrimary, RoundedCornerShape(999.dp))
+                        .border(1.5.dp, SageGreen, RoundedCornerShape(999.dp))
                         .clickable { viewModel.openDownloadDialog() }
-                        .padding(vertical = 11.dp)
+                        .padding(vertical = 11.5.dp)
                         .testTag("urlBtn"),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = "🔗 Import from URL",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = PeachPrimary
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SageGreen
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Integrity Note (.integrity-note)
+            // Storage Banner
+            StorageBanner(
+                storageInfo = storageInfo,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Integrity Note
             Text(
                 text = "Import audio you own or are licensed to use — your purchases, your own recordings, Creative Commons archives, or direct files you have rights to. Your library is saved on this device.",
-                fontSize = 12.sp,
-                color = InkSoft,
-                lineHeight = 17.sp,
+                fontSize = 11.5.sp,
+                color = TextSubtle,
+                lineHeight = 16.sp,
                 modifier = Modifier.padding(horizontal = 18.dp)
             )
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Library List or Empty State
             if (tracks.isEmpty()) {
-                // Empty State (.empty-state)
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 20.dp, vertical = 32.dp),
+                        .padding(horizontal = 20.dp, vertical = 28.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
                     ) {
-                        // Empty Art (.empty-art: 92px circle, #FFE8D9, font-size 2.6rem color #EF8B57)
                         Box(
                             modifier = Modifier
                                 .size(92.dp)
                                 .clip(CircleShape)
-                                .background(PeachSoft),
+                                .background(SageGreenDeep),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "♪",
                                 fontSize = 42.sp,
-                                color = PeachPrimary,
+                                color = SageGreen,
                                 fontWeight = FontWeight.Normal
                             )
                         }
@@ -291,37 +311,36 @@ fun OgmApp(
                             text = "Your library awaits",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = InkDark
+                            color = TextLight
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = "Convert and keep the music you own. Once saved, tracks play anytime — even offline. No accounts, no servers holding your library.",
-                            fontSize = 14.sp,
-                            color = InkSoft,
+                            fontSize = 13.5.sp,
+                            color = TextMuted,
                             textAlign = TextAlign.Center,
-                            lineHeight = 22.sp,
+                            lineHeight = 21.sp,
                             modifier = Modifier.padding(horizontal = 20.dp)
                         )
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Secondary action: Scan phone storage
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(999.dp))
-                                .background(PeachSoft)
+                                .background(SageGreenDeep)
                                 .clickable { viewModel.scanDeviceMusic() }
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .padding(horizontal = 18.dp, vertical = 9.dp)
                                 .testTag("scan_phone_btn"),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 text = "Scan phone Music folder",
-                                fontSize = 12.sp,
+                                fontSize = 12.5.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = PeachPrimary
+                                color = SageGreen
                             )
                         }
                     }
@@ -344,6 +363,7 @@ fun OgmApp(
                                 viewModel.startDownload(track.uriString, saveToMusicFolder = true, bitrateKbps = 192)
                             },
                             onSaveToMusicClick = { viewModel.saveTrackToDeviceMusic(track) },
+                            onLyricsClick = { viewModel.openLyrics(track) },
                             onDeleteClick = { viewModel.deleteTrack(track) }
                         )
                     }
@@ -362,6 +382,7 @@ fun OgmApp(
             isDownloading = isDownloading,
             downloadProgress = downloadProgress,
             downloadStatus = downloadStatus,
+            initialUrl = prefilledUrl,
             onDismiss = { viewModel.closeDownloadDialog() },
             onStartDownload = { url, saveToMusic, bitrate ->
                 viewModel.startDownload(url, saveToMusic, bitrate)
@@ -377,8 +398,13 @@ fun OgmApp(
     if (showYouTubeBrowser) {
         YouTubeBrowserSheet(
             onClose = { viewModel.closeYouTubeBrowser() },
-            onConvertVideo = { videoUrl ->
-                viewModel.startDownload(videoUrl, saveToMusicFolder = true, bitrateKbps = 192)
+            onConvertVideo = { videoUrl, capturedStream ->
+                viewModel.startDownload(
+                    url = videoUrl,
+                    saveToMusicFolder = true,
+                    bitrateKbps = 192,
+                    capturedStreamUrl = capturedStream
+                )
             }
         )
     }
@@ -397,6 +423,14 @@ fun OgmApp(
             onSetSpeed = { viewModel.player.setSpeed(it) },
             onSaveToDeviceMusic = { viewModel.saveTrackToDeviceMusic(it) },
             onSelectQueueItem = { viewModel.player.setQueueAndPlay(playerState.queue, it) }
+        )
+    }
+
+    // Lyrics & Chord Sheet Dialog
+    if (selectedTrackForLyrics != null) {
+        LyricsDialog(
+            track = selectedTrackForLyrics!!,
+            onDismiss = { viewModel.closeLyrics() }
         )
     }
 }

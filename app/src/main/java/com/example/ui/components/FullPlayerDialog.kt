@@ -73,13 +73,18 @@ import coil.compose.AsyncImage
 import com.example.data.model.Track
 import com.example.player.LoopMode
 import com.example.player.PlayerState
-import com.example.ui.theme.CreamBackground
-import com.example.ui.theme.InkDark
-import com.example.ui.theme.InkMedium
-import com.example.ui.theme.InkSoft
-import com.example.ui.theme.PeachDark
-import com.example.ui.theme.PeachPrimary
-import com.example.ui.theme.PeachSoft
+import com.example.ui.theme.CinzelFontFamily
+import com.example.ui.theme.PlayfairDisplayFontFamily
+import com.example.ui.theme.DarkBg
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.DarkCardHover
+import com.example.ui.theme.OnSageGreen
+import com.example.ui.theme.SageGreen
+import com.example.ui.theme.SageGreenDeep
+import com.example.ui.theme.TextLight
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextSubtle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,7 +104,7 @@ fun FullPlayerDialog(
     val track = playerState.currentTrack ?: return
     var showQueueSheet by remember { mutableStateOf(false) }
 
-    // Vinyl spinning animation when audio is active
+    // Vinyl spinning animation when audio is playing
     val infiniteTransition = rememberInfiniteTransition(label = "disc_spin")
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -116,7 +121,7 @@ fun FullPlayerDialog(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = CreamBackground
+            color = DarkBg
         ) {
             Column(
                 modifier = Modifier
@@ -140,22 +145,23 @@ fun FullPlayerDialog(
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close Player",
-                            tint = InkDark
+                            tint = TextLight
                         )
                     }
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "PLAYING FROM OGM",
-                            fontSize = 11.sp,
+                            text = "PLAYING FROM OPEN GRACE MUSIC",
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = PeachDark,
-                            letterSpacing = 1.sp
+                            fontFamily = CinzelFontFamily,
+                            color = SageGreen,
+                            letterSpacing = 1.2.sp
                         )
                         Text(
                             text = if (track.savedToDeviceMusic) "● Saved to Music Folder" else "● Offline Ready",
                             fontSize = 10.sp,
-                            color = InkSoft
+                            color = TextMuted
                         )
                     }
 
@@ -163,7 +169,7 @@ fun FullPlayerDialog(
                         Icon(
                             imageVector = Icons.Default.QueueMusic,
                             contentDescription = "View Queue",
-                            tint = InkDark
+                            tint = TextLight
                         )
                     }
                 }
@@ -174,10 +180,10 @@ fun FullPlayerDialog(
                 Box(
                     modifier = Modifier
                         .size(260.dp)
-                        .shadow(16.dp, CircleShape)
+                        .shadow(20.dp, CircleShape, ambientColor = SageGreen, spotColor = Color.Black)
                         .clip(CircleShape)
-                        .background(Color(0xFF1E1611))
-                        .border(4.dp, Color(0xFF38261B), CircleShape)
+                        .background(Color(0xFF151915))
+                        .border(4.dp, Color(0xFF263024), CircleShape)
                         .rotate(if (playerState.isPlaying) rotation else 0f),
                     contentAlignment = Alignment.Center
                 ) {
@@ -185,12 +191,12 @@ fun FullPlayerDialog(
                     Box(
                         modifier = Modifier
                             .size(210.dp)
-                            .border(1.dp, Color(0xFF2C1E16), CircleShape)
+                            .border(1.dp, Color(0xFF1E251D), CircleShape)
                     )
                     Box(
                         modifier = Modifier
                             .size(160.dp)
-                            .border(1.dp, Color(0xFF2C1E16), CircleShape)
+                            .border(1.dp, Color(0xFF1E251D), CircleShape)
                     )
 
                     // Center album artwork / label
@@ -198,7 +204,7 @@ fun FullPlayerDialog(
                         modifier = Modifier
                             .size(105.dp)
                             .clip(CircleShape)
-                            .background(PeachPrimary),
+                            .background(SageGreenDeep),
                         contentAlignment = Alignment.Center
                     ) {
                         if (!track.thumbnailUrl.isNullOrEmpty()) {
@@ -213,7 +219,7 @@ fun FullPlayerDialog(
                                 text = track.initials,
                                 fontSize = 28.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
+                                color = SageGreen
                             )
                         }
                     }
@@ -223,7 +229,7 @@ fun FullPlayerDialog(
                         modifier = Modifier
                             .size(14.dp)
                             .clip(CircleShape)
-                            .background(CreamBackground)
+                            .background(DarkBg)
                     )
                 }
 
@@ -238,7 +244,8 @@ fun FullPlayerDialog(
                         text = track.title,
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = InkDark,
+                        fontFamily = PlayfairDisplayFontFamily,
+                        color = TextLight,
                         textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
@@ -247,7 +254,7 @@ fun FullPlayerDialog(
                     Text(
                         text = track.artist,
                         fontSize = 14.sp,
-                        color = InkSoft,
+                        color = TextMuted,
                         textAlign = TextAlign.Center
                     )
 
@@ -262,17 +269,23 @@ fun FullPlayerDialog(
                             FilterChip(
                                 selected = false,
                                 onClick = { onSaveToDeviceMusic(track) },
-                                label = { Text("Save to Music Folder", fontSize = 11.sp) },
+                                label = { Text("Save to Music Folder", fontSize = 11.sp, color = TextLight) },
                                 leadingIcon = {
                                     Icon(
                                         imageVector = Icons.Default.FolderSpecial,
                                         contentDescription = null,
+                                        tint = SageGreen,
                                         modifier = Modifier.size(14.dp)
                                     )
                                 },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = Color.White,
-                                    labelColor = InkDark
+                                    containerColor = DarkCard,
+                                    labelColor = TextLight
+                                ),
+                                border = FilterChipDefaults.filterChipBorder(
+                                    enabled = true,
+                                    selected = false,
+                                    borderColor = DarkCardBorder
                                 )
                             )
                         }
@@ -288,13 +301,20 @@ fun FullPlayerDialog(
                                 Icon(
                                     imageVector = Icons.Default.FastForward,
                                     contentDescription = null,
+                                    tint = SageGreen,
                                     modifier = Modifier.size(14.dp)
                                 )
                             },
                             colors = FilterChipDefaults.filterChipColors(
-                                containerColor = Color.White,
-                                selectedContainerColor = PeachSoft,
-                                labelColor = InkDark
+                                containerColor = DarkCard,
+                                selectedContainerColor = SageGreenDeep,
+                                labelColor = TextLight,
+                                selectedLabelColor = SageGreen
+                            ),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = playerState.playbackSpeed != 1.0f,
+                                borderColor = DarkCardBorder
                             )
                         )
                     }
@@ -317,9 +337,9 @@ fun FullPlayerDialog(
                             onSeek(newMs)
                         },
                         colors = SliderDefaults.colors(
-                            thumbColor = PeachPrimary,
-                            activeTrackColor = PeachPrimary,
-                            inactiveTrackColor = PeachSoft
+                            thumbColor = SageGreen,
+                            activeTrackColor = SageGreen,
+                            inactiveTrackColor = DarkCardHover
                         ),
                         modifier = Modifier
                             .fillMaxWidth()
@@ -333,12 +353,12 @@ fun FullPlayerDialog(
                         Text(
                             text = playerState.formattedCurrentTime,
                             fontSize = 12.sp,
-                            color = InkSoft
+                            color = TextSubtle
                         )
                         Text(
                             text = playerState.formattedDuration,
                             fontSize = 12.sp,
-                            color = InkSoft
+                            color = TextSubtle
                         )
                     }
                 }
@@ -357,7 +377,7 @@ fun FullPlayerDialog(
                         Icon(
                             imageVector = Icons.Default.Shuffle,
                             contentDescription = "Shuffle",
-                            tint = if (playerState.isShuffle) PeachPrimary else InkSoft,
+                            tint = if (playerState.isShuffle) SageGreen else TextSubtle,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -370,25 +390,25 @@ fun FullPlayerDialog(
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
                             contentDescription = "Previous Track",
-                            tint = InkDark,
+                            tint = TextLight,
                             modifier = Modifier.size(32.dp)
                         )
                     }
 
-                    // Main Big Play/Pause Button
+                    // Main Big Play/Pause Button (Sage Green, dark OnSageGreen icon)
                     IconButton(
                         onClick = onTogglePlayPause,
                         modifier = Modifier
                             .size(72.dp)
-                            .shadow(8.dp, CircleShape)
+                            .shadow(12.dp, CircleShape, ambientColor = SageGreen, spotColor = SageGreen)
                             .clip(CircleShape)
-                            .background(PeachPrimary)
+                            .background(SageGreen)
                             .testTag("full_player_play_pause")
                     ) {
                         Icon(
                             imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                            tint = Color.White,
+                            tint = OnSageGreen,
                             modifier = Modifier.size(38.dp)
                         )
                     }
@@ -401,7 +421,7 @@ fun FullPlayerDialog(
                         Icon(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = "Next Track",
-                            tint = InkDark,
+                            tint = TextLight,
                             modifier = Modifier.size(32.dp)
                         )
                     }
@@ -412,9 +432,9 @@ fun FullPlayerDialog(
                         modifier = Modifier.size(44.dp)
                     ) {
                         val (icon, tint) = when (playerState.loopMode) {
-                            LoopMode.OFF -> Icons.Default.Repeat to InkSoft
-                            LoopMode.ALL -> Icons.Default.Repeat to PeachPrimary
-                            LoopMode.ONE -> Icons.Default.RepeatOne to PeachPrimary
+                            LoopMode.OFF -> Icons.Default.Repeat to TextSubtle
+                            LoopMode.ALL -> Icons.Default.Repeat to SageGreen
+                            LoopMode.ONE -> Icons.Default.RepeatOne to SageGreen
                         }
                         Icon(
                             imageVector = icon,
@@ -434,7 +454,7 @@ fun FullPlayerDialog(
     if (showQueueSheet) {
         ModalBottomSheet(
             onDismissRequest = { showQueueSheet = false },
-            containerColor = Color.White
+            containerColor = DarkCard
         ) {
             Column(
                 modifier = Modifier
@@ -445,7 +465,7 @@ fun FullPlayerDialog(
                     text = "Playing Queue (${playerState.queue.size} songs)",
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Bold,
-                    color = InkDark
+                    color = TextLight
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -462,7 +482,7 @@ fun FullPlayerDialog(
                                 showQueueSheet = false
                             },
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isCurrent) PeachSoft else Color.Transparent
+                                containerColor = if (isCurrent) SageGreenDeep else Color.Transparent
                             ),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
@@ -479,7 +499,7 @@ fun FullPlayerDialog(
                                     text = "${idx + 1}",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isCurrent) PeachPrimary else InkSoft,
+                                    color = if (isCurrent) SageGreen else TextSubtle,
                                     modifier = Modifier.width(28.dp)
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
@@ -487,21 +507,21 @@ fun FullPlayerDialog(
                                         text = qTrack.title,
                                         fontSize = 13.sp,
                                         fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                                        color = InkDark,
+                                        color = TextLight,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = qTrack.artist,
                                         fontSize = 11.sp,
-                                        color = InkSoft,
+                                        color = TextMuted,
                                         maxLines = 1
                                     )
                                 }
                                 Text(
                                     text = qTrack.formattedDuration,
                                     fontSize = 11.sp,
-                                    color = InkMedium
+                                    color = TextSubtle
                                 )
                             }
                         }

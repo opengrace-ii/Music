@@ -1,7 +1,7 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -39,10 +38,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.player.PlayerState
-import com.example.ui.theme.InkDark
-import com.example.ui.theme.InkSoft
-import com.example.ui.theme.PeachPrimary
-import com.example.ui.theme.PeachSoft
+import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkCardBorder
+import com.example.ui.theme.DarkCardHover
+import com.example.ui.theme.OnSageGreen
+import com.example.ui.theme.SageGreen
+import com.example.ui.theme.SageGreenDeep
+import com.example.ui.theme.TextLight
+import com.example.ui.theme.TextMuted
+import com.example.ui.theme.TextSubtle
 
 @Composable
 fun NowPlayingBar(
@@ -63,8 +67,8 @@ fun NowPlayingBar(
         modifier = modifier
             .fillMaxWidth()
             .testTag("now_playing_bar"),
-        color = Color(0xF5FFFFFF),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFF3E2D5))
+        color = DarkCard,
+        border = BorderStroke(1.dp, DarkCardBorder)
     ) {
         Column(
             modifier = Modifier
@@ -73,7 +77,7 @@ fun NowPlayingBar(
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Row 1: np-info (Thumb, title, subtitle)
+            // Row 1: Track Info (Thumbnail, Title, Status)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -82,9 +86,9 @@ fun NowPlayingBar(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(42.dp)
                         .clip(RoundedCornerShape(10.dp))
-                        .background(PeachPrimary),
+                        .background(SageGreenDeep),
                     contentAlignment = Alignment.Center
                 ) {
                     if (!track.thumbnailUrl.isNullOrEmpty()) {
@@ -99,32 +103,32 @@ fun NowPlayingBar(
                             text = "♪",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = SageGreen
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(12.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = track.title,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = InkDark,
+                        color = TextLight,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "${playerState.formattedDuration} · ${if (track.savedToDeviceMusic) "saved in music ✓" else "offline ✓"}",
-                        fontSize = 11.sp,
-                        color = InkSoft,
+                        fontSize = 11.5.sp,
+                        color = TextMuted,
                         maxLines = 1
                     )
                 }
             }
 
-            // Row 2: np-controls (Shuffle 🔀, Prev ⏮, Play 52dp circle, Next ⏭)
+            // Row 2: Controls (Shuffle, Prev, Play 52dp circle, Next)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
@@ -141,11 +145,11 @@ fun NowPlayingBar(
                     Text(
                         text = "🔀",
                         fontSize = 17.sp,
-                        color = if (playerState.isShuffle) PeachPrimary else InkDark
+                        color = if (playerState.isShuffle) SageGreen else TextMuted
                     )
                 }
 
-                Spacer(modifier = Modifier.width(18.dp))
+                Spacer(modifier = Modifier.width(20.dp))
 
                 // Previous Button
                 Box(
@@ -158,19 +162,19 @@ fun NowPlayingBar(
                     Text(
                         text = "⏮",
                         fontSize = 18.sp,
-                        color = InkDark
+                        color = TextLight
                     )
                 }
 
-                Spacer(modifier = Modifier.width(18.dp))
+                Spacer(modifier = Modifier.width(20.dp))
 
-                // Big Circular Play Button (52dp, Peach, white icon)
+                // Big Circular Play Button (52dp, Sage Green, Dark OnSageGreen icon)
                 Box(
                     modifier = Modifier
                         .size(52.dp)
-                        .shadow(8.dp, CircleShape, ambientColor = PeachPrimary, spotColor = PeachPrimary)
+                        .shadow(8.dp, CircleShape, ambientColor = SageGreen, spotColor = SageGreen)
                         .clip(CircleShape)
-                        .background(PeachPrimary)
+                        .background(SageGreen)
                         .clickable { onTogglePlayPause() }
                         .testTag("now_playing_play_pause"),
                     contentAlignment = Alignment.Center
@@ -179,11 +183,11 @@ fun NowPlayingBar(
                         text = if (playerState.isPlaying) "❚❚" else "▶",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = OnSageGreen
                     )
                 }
 
-                Spacer(modifier = Modifier.width(18.dp))
+                Spacer(modifier = Modifier.width(20.dp))
 
                 // Next Button
                 Box(
@@ -196,12 +200,12 @@ fun NowPlayingBar(
                     Text(
                         text = "⏭",
                         fontSize = 18.sp,
-                        color = InkDark
+                        color = TextLight
                     )
                 }
             }
 
-            // Row 3: np-seek (currentTime, slider, durationTime)
+            // Row 3: Seekbar (currentTime, slider, durationTime)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -209,8 +213,8 @@ fun NowPlayingBar(
                 Text(
                     text = playerState.formattedCurrentTime,
                     fontSize = 11.sp,
-                    color = InkSoft,
-                    modifier = Modifier.width(32.dp)
+                    color = TextSubtle,
+                    modifier = Modifier.width(34.dp)
                 )
 
                 Slider(
@@ -225,9 +229,9 @@ fun NowPlayingBar(
                         onSeek(targetMs)
                     },
                     colors = SliderDefaults.colors(
-                        thumbColor = PeachPrimary,
-                        activeTrackColor = PeachPrimary,
-                        inactiveTrackColor = PeachSoft
+                        thumbColor = SageGreen,
+                        activeTrackColor = SageGreen,
+                        inactiveTrackColor = DarkCardHover
                     ),
                     modifier = Modifier
                         .weight(1f)
@@ -238,8 +242,8 @@ fun NowPlayingBar(
                 Text(
                     text = playerState.formattedDuration,
                     fontSize = 11.sp,
-                    color = InkSoft,
-                    modifier = Modifier.width(32.dp)
+                    color = TextSubtle,
+                    modifier = Modifier.width(34.dp)
                 )
             }
         }

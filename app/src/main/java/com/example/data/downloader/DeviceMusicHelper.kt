@@ -32,7 +32,7 @@ object DeviceMusicHelper {
         sourceFile: File,
         title: String,
         artist: String,
-        album: String = "OGM Library",
+        album: String = "Open Grace Music",
         mimeType: String = "audio/mpeg"
     ): Uri? = withContext(Dispatchers.IO) {
         try {
@@ -48,7 +48,7 @@ object DeviceMusicHelper {
                 put(MediaStore.Audio.Media.IS_MUSIC, 1)
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/OGM")
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/OpenGraceMusic")
                     put(MediaStore.Audio.Media.IS_PENDING, 1)
                 }
             }
