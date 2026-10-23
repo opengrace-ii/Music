@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -15,6 +17,8 @@ import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +38,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -42,6 +47,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -63,28 +69,61 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.downloader.YouTubeStreamResolver
 import com.example.ui.theme.DarkBg
 import com.example.ui.theme.DarkCard
+import com.example.ui.theme.DarkCardBorder
 import com.example.ui.theme.OnSageGreen
 import com.example.ui.theme.SageGreen
 import com.example.ui.theme.SageGreenDeep
 import com.example.ui.theme.TextLight
 import com.example.ui.theme.TextMuted
 
+class WebAppBridge(
+    private val onUrlChanged: (url: String, title: String) -> Unit
+) {
+    @JavascriptInterface
+    fun reportUrl(url: String, title: String) {
+        onUrlChanged(url, title)
+    }
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun YouTubeBrowserSheet(
+    initialUrl: String? = null,
     onClose: () -> Unit,
-    onConvertVideo: (String, String?) -> Unit
+    onConvertVideo: (url: String, capturedStreamUrl: String?, capturedHeaders: Map<String, String>?) -> Unit
 ) {
     val context = LocalContext.current
-    var currentUrl by remember { mutableStateOf("https://m.youtube.com") }
+    val startingUrl = remember(initialUrl) {
+        if (!initialUrl.isNullOrBlank()) {
+            val id = YouTubeStreamResolver.extractYouTubeId(initialUrl)
+            if (id != null) "https://m.youtube.com/watch?v=$id" else initialUrl
+        } else {
+            "https://m.youtube.com"
+        }
+    }
+
+    var currentUrl by remember { mutableStateOf(startingUrl) }
     var currentTitle by remember { mutableStateOf("YouTube Music & Videos") }
+    var detectedVideoId by remember { mutableStateOf(YouTubeStreamResolver.extractYouTubeId(startingUrl)) }
     var pageProgress by remember { mutableFloatStateOf(0f) }
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var capturedStreamUrl by remember { mutableStateOf<String?>(null) }
+    var capturedHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
 
-    val isVideoPage = currentUrl.contains("watch?v=") || currentUrl.contains("youtu.be/") || currentUrl.contains("/shorts/")
+    fun copyCurrentVideoUrl() {
+        if (detectedVideoId != null) {
+            val cleanUrl = YouTubeStreamResolver.canonicalWatchUrl(detectedVideoId!!)
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("YouTube Video URL", cleanUrl)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "✓ Copied YouTube link:\n$cleanUrl", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(context, "Please tap on a video to play and copy its link", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     BackHandler {
         if (webViewInstance?.canGoBack() == true) {
@@ -148,23 +187,41 @@ fun YouTubeBrowserSheet(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = currentUrl,
-                            fontSize = 10.sp,
-                            color = TextMuted,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (detectedVideoId != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(SageGreenDeep)
+                                        .padding(horizontal = 5.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = "VIDEO DETECTED",
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SageGreen
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
+                            Text(
+                                text = if (detectedVideoId != null) {
+                                    "youtube.com/watch?v=$detectedVideoId"
+                                } else {
+                                    currentUrl.take(45)
+                                },
+                                fontSize = 10.sp,
+                                color = if (detectedVideoId != null) SageGreen else TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
-                    // Copy URL Button (Provision to directly copy URL from YouTube)
+                    // Direct Copy Button with high visibility
                     IconButton(
-                        onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val clip = ClipData.newPlainText("YouTube URL", currentUrl)
-                            clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, "✓ Copied YouTube URL to clipboard", Toast.LENGTH_SHORT).show()
-                        },
+                        onClick = { copyCurrentVideoUrl() },
                         modifier = Modifier.testTag("copy_yt_url_btn")
                     ) {
                         Icon(
@@ -182,10 +239,11 @@ fun YouTubeBrowserSheet(
                         )
                     }
 
-                    // Direct Save Button in Header if on video page
-                    if (isVideoPage) {
+                    // Header Save Button if video detected
+                    if (detectedVideoId != null) {
+                        val videoUrl = YouTubeStreamResolver.canonicalWatchUrl(detectedVideoId!!)
                         Button(
-                            onClick = { onConvertVideo(currentUrl, capturedStreamUrl) },
+                            onClick = { onConvertVideo(videoUrl, capturedStreamUrl, capturedHeaders) },
                             colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
                             shape = RoundedCornerShape(999.dp),
                             modifier = Modifier
@@ -224,21 +282,104 @@ fun YouTubeBrowserSheet(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
                                 )
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                settings.mediaPlaybackRequiresUserGesture = false
-                                settings.cacheMode = WebSettings.LOAD_DEFAULT
-                                settings.userAgentString =
-                                    "Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36"
+                                settings.apply {
+                                    javaScriptEnabled = true
+                                    domStorageEnabled = true
+                                    mediaPlaybackRequiresUserGesture = false
+                                    cacheMode = WebSettings.LOAD_DEFAULT
+                                    userAgentString = YouTubeStreamResolver.DEFAULT_USER_AGENT
+                                }
+
+                                addJavascriptInterface(
+                                    WebAppBridge { url, title ->
+                                        post {
+                                            if (url.isNotBlank()) {
+                                                currentUrl = url
+                                                val id = YouTubeStreamResolver.extractYouTubeId(url)
+                                                if (id != null && id != detectedVideoId) {
+                                                    detectedVideoId = id
+                                                    capturedStreamUrl = null
+                                                    capturedHeaders = null
+                                                }
+                                            }
+                                            if (title.isNotBlank() && !title.equals("YouTube", ignoreCase = true)) {
+                                                currentTitle = title
+                                            }
+                                        }
+                                    },
+                                    "AndroidBridge"
+                                )
 
                                 webViewClient = object : WebViewClient() {
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                        url?.let { currentUrl = it }
+                                        url?.let {
+                                            currentUrl = it
+                                            val id = YouTubeStreamResolver.extractYouTubeId(it)
+                                            if (id != null) {
+                                                if (id != detectedVideoId) {
+                                                    detectedVideoId = id
+                                                    capturedStreamUrl = null
+                                                    capturedHeaders = null
+                                                }
+                                            } else if (it.contains("/results") || it.endsWith("youtube.com/") || it.contains("m.youtube.com/?")) {
+                                                detectedVideoId = null
+                                                capturedStreamUrl = null
+                                                capturedHeaders = null
+                                            }
+                                        }
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
-                                        url?.let { currentUrl = it }
-                                        view?.title?.let { currentTitle = it }
+                                        url?.let {
+                                            currentUrl = it
+                                            val id = YouTubeStreamResolver.extractYouTubeId(it)
+                                            if (id != null && id != detectedVideoId) {
+                                                detectedVideoId = id
+                                                capturedStreamUrl = null
+                                                capturedHeaders = null
+                                            }
+                                        }
+                                        view?.title?.let {
+                                            if (it.isNotBlank() && !it.equals("YouTube", ignoreCase = true)) {
+                                                currentTitle = it
+                                            }
+                                        }
+
+                                        // Inject SPA navigation listener for YouTube mobile
+                                        view?.evaluateJavascript(
+                                            """
+                                            (function() {
+                                                if (window._ogmBridgeAttached) return;
+                                                window._ogmBridgeAttached = true;
+                                                function notify() {
+                                                    var href = window.location.href;
+                                                    var t = document.title;
+                                                    var canonical = document.querySelector('link[rel="canonical"]');
+                                                    if (canonical && canonical.href && canonical.href.indexOf('watch?v=') !== -1) {
+                                                        href = canonical.href;
+                                                    }
+                                                    if (window.AndroidBridge) {
+                                                        window.AndroidBridge.reportUrl(href, t);
+                                                    }
+                                                }
+                                                window.addEventListener('yt-navigate-finish', notify);
+                                                window.addEventListener('yt-page-data-updated', notify);
+                                                window.addEventListener('popstate', notify);
+                                                var origPush = history.pushState;
+                                                history.pushState = function() {
+                                                    origPush.apply(this, arguments);
+                                                    setTimeout(notify, 100);
+                                                };
+                                                var origRepl = history.replaceState;
+                                                history.replaceState = function() {
+                                                    origRepl.apply(this, arguments);
+                                                    setTimeout(notify, 100);
+                                                };
+                                                setInterval(notify, 600);
+                                            })();
+                                            """.trimIndent(),
+                                            null
+                                        )
                                     }
 
                                     override fun shouldInterceptRequest(
@@ -249,7 +390,11 @@ fun YouTubeBrowserSheet(
                                         if (reqUrl.contains("googlevideo.com/videoplayback") &&
                                             (reqUrl.contains("mime=audio") || reqUrl.contains("audio/"))
                                         ) {
-                                            capturedStreamUrl = reqUrl
+                                            val currentId = detectedVideoId
+                                            if (currentId != null && (reqUrl.contains(currentId) || reqUrl.contains("docid=$currentId"))) {
+                                                capturedStreamUrl = YouTubeStreamResolver.prepareFullStreamUrl(reqUrl)
+                                                capturedHeaders = request?.requestHeaders
+                                            }
                                         }
                                         return super.shouldInterceptRequest(view, request)
                                     }
@@ -261,66 +406,114 @@ fun YouTubeBrowserSheet(
                                     }
 
                                     override fun onReceivedTitle(view: WebView?, title: String?) {
-                                        title?.let { currentTitle = it }
+                                        title?.let {
+                                            if (it.isNotBlank() && !it.equals("YouTube", ignoreCase = true)) {
+                                                currentTitle = it
+                                            }
+                                        }
                                     }
                                 }
 
-                                loadUrl(currentUrl)
+                                loadUrl(startingUrl)
                                 webViewInstance = this
                             }
                         },
                         modifier = Modifier.fillMaxSize()
                     )
 
-                    // Bottom Floating Action Banner when video is detected
-                    if (isVideoPage) {
+                    // Bottom Floating Action Card when a video is detected
+                    if (detectedVideoId != null) {
+                        val videoUrl = YouTubeStreamResolver.canonicalWatchUrl(detectedVideoId!!)
                         Card(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
-                                .padding(16.dp)
+                                .padding(14.dp)
                                 .testTag("convert_current_video_card"),
                             shape = RoundedCornerShape(18.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkCard),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
                             elevation = CardDefaults.cardElevation(defaultElevation = 10.dp)
                         ) {
-                            Row(
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                                    .padding(14.dp)
                             ) {
-                                Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = SageGreen,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "YouTube Music Video Ready",
+                                        text = currentTitle,
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = TextLight
-                                    )
-                                    Text(
-                                        text = "Convert & download directly into phone's Music folder",
-                                        fontSize = 11.sp,
-                                        color = TextMuted
+                                        color = TextLight,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = videoUrl,
+                                    fontSize = 11.sp,
+                                    color = SageGreen,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(vertical = 4.dp)
+                                )
 
-                                Button(
-                                    onClick = { onConvertVideo(currentUrl, capturedStreamUrl) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
-                                    shape = RoundedCornerShape(999.dp),
-                                    modifier = Modifier.testTag("convert_current_video_button")
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Download,
-                                        contentDescription = null,
-                                        tint = OnSageGreen,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Save MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OnSageGreen)
+                                    // 1. Directly Copy Clean URL
+                                    OutlinedButton(
+                                        onClick = { copyCurrentVideoUrl() },
+                                        shape = RoundedCornerShape(999.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextLight),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("copy_detected_url_btn")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.ContentCopy,
+                                            contentDescription = null,
+                                            tint = SageGreen,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Copy URL", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    }
+
+                                    // 2. Direct 1-Tap Convert & Save MP3
+                                    Button(
+                                        onClick = { onConvertVideo(videoUrl, capturedStreamUrl, capturedHeaders) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = SageGreen),
+                                        shape = RoundedCornerShape(999.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("convert_current_video_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Download,
+                                            contentDescription = null,
+                                            tint = OnSageGreen,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Save MP3", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = OnSageGreen)
+                                    }
                                 }
                             }
                         }

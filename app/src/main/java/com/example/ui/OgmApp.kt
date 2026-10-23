@@ -165,11 +165,11 @@ fun OgmApp(
                     Column {
                         Text(
                             text = "Open Grace Music",
-                            fontSize = 20.sp,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
-                            fontFamily = PlayfairDisplayFontFamily,
+                            fontFamily = com.example.ui.theme.ItalianaFontFamily,
                             color = TextLight,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.75.sp
                         )
                         Text(
                             text = "Your personal music space · hymns & acoustics",
@@ -377,6 +377,7 @@ fun OgmApp(
     }
 
     // URL / YouTube Download Dialog
+    // Download & Conversion Dialog
     if (showDownloadDialog) {
         DownloadDialog(
             isDownloading = isDownloading,
@@ -387,9 +388,9 @@ fun OgmApp(
             onStartDownload = { url, saveToMusic, bitrate ->
                 viewModel.startDownload(url, saveToMusic, bitrate)
             },
-            onOpenYouTubeBrowser = {
+            onOpenYouTubeBrowser = { targetUrl ->
                 viewModel.closeDownloadDialog()
-                viewModel.openYouTubeBrowser()
+                viewModel.openYouTubeBrowser(targetUrl)
             }
         )
     }
@@ -397,13 +398,15 @@ fun OgmApp(
     // YouTube Web Browser Sheet
     if (showYouTubeBrowser) {
         YouTubeBrowserSheet(
+            initialUrl = prefilledUrl,
             onClose = { viewModel.closeYouTubeBrowser() },
-            onConvertVideo = { videoUrl, capturedStream ->
+            onConvertVideo = { videoUrl, capturedStream, capturedHeaders ->
                 viewModel.startDownload(
                     url = videoUrl,
                     saveToMusicFolder = true,
                     bitrateKbps = 192,
-                    capturedStreamUrl = capturedStream
+                    capturedStreamUrl = capturedStream,
+                    streamHeaders = capturedHeaders
                 )
             }
         )

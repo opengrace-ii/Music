@@ -135,8 +135,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _showDownloadDialog.value = false
     }
 
-    fun openYouTubeBrowser() { _showYouTubeBrowser.value = true }
-    fun closeYouTubeBrowser() { _showYouTubeBrowser.value = false }
+    fun openYouTubeBrowser(initialUrl: String? = null) {
+        _prefilledUrl.value = initialUrl
+        _showYouTubeBrowser.value = true
+    }
+    fun closeYouTubeBrowser() {
+        _showYouTubeBrowser.value = false
+    }
 
     fun openFullPlayer() { _showFullPlayer.value = true }
     fun closeFullPlayer() { _showFullPlayer.value = false }
@@ -154,7 +159,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         url: String,
         saveToMusicFolder: Boolean = true,
         bitrateKbps: Int = 192,
-        capturedStreamUrl: String? = null
+        capturedStreamUrl: String? = null,
+        streamHeaders: Map<String, String>? = null
     ) {
         if (url.isBlank()) {
             _userMessage.value = "Please enter a valid YouTube or audio link."
@@ -164,7 +170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _isDownloading.value = true
             _downloadProgress.value = 0.05f
-            _downloadStatus.value = "Resolving stream & title..."
+            _downloadStatus.value = "Resolving audio & metadata..."
 
             try {
                 val mediaInfo = downloader.resolveMediaInfo(url)
@@ -172,7 +178,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     mediaInfo = mediaInfo,
                     saveToPublicMusic = saveToMusicFolder,
                     bitrateKbps = bitrateKbps,
-                    capturedStreamUrl = capturedStreamUrl
+                    capturedStreamUrl = capturedStreamUrl,
+                    streamHeaders = streamHeaders
                 ) { progress, status ->
                     _downloadProgress.value = progress
                     _downloadStatus.value = status
@@ -188,7 +195,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 // Auto-play newly downloaded track
                 player.playTrack(track, tracks.value + track)
             } catch (e: Exception) {
-                _userMessage.value = "Download error: ${e.message}"
+                _userMessage.value = "Conversion error: ${e.message ?: "Failed to process audio"}"
             } finally {
                 _isDownloading.value = false
                 _downloadProgress.value = 0f

@@ -17,7 +17,7 @@ data class Track(
     val id: String,
     val title: String,
     val artist: String = "Open Grace Music",
-    val album: String = "OGM Library",
+    val album: String = "Open Grace Music",
     val durationMs: Long = 0L,
     val sizeBytes: Long = 0L,
     val format: String = "MP3",
