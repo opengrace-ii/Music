@@ -1,0 +1,155 @@
+package com.example.data.downloader
+
+import android.content.ContentResolver
+import android.content.ContentUris
+import android.content.ContentValues
+import android.content.Context
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Log
+import com.example.data.model.StorageStatus
+import com.example.data.model.Track
+import com.example.data.model.TrackSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+
+object DeviceMusicHelper {
+    private const val TAG = "DeviceMusicHelper"
+
+    /**
+     * Saves an audio file to Android's public Music folder using MediaStore,
+     * making it instantly accessible to both OGM and any system music player.
+     */
+    suspend fun saveToSystemMusicFolder(
+        context: Context,
+        sourceFile: File,
+        title: String,
+        artist: String,
+        album: String = "OGM Library",
+        mimeType: String = "audio/mpeg"
+    ): Uri? = withContext(Dispatchers.IO) {
+        try {
+            val resolver = context.contentResolver
+            val displayName = if (title.endsWith(".mp3", ignoreCase = true)) title else "$title.mp3"
+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
+                put(MediaStore.Audio.Media.TITLE, title.replace(".mp3", ""))
+                put(MediaStore.Audio.Media.ARTIST, artist)
+                put(MediaStore.Audio.Media.ALBUM, album)
+                put(MediaStore.Audio.Media.MIME_TYPE, mimeType)
+                put(MediaStore.Audio.Media.IS_MUSIC, 1)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/OGM")
+                    put(MediaStore.Audio.Media.IS_PENDING, 1)
+                }
+            }
+
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            }
+
+            val uri = resolver.insert(collection, contentValues) ?: return@withContext null
+
+            resolver.openOutputStream(uri)?.use { out ->
+                FileInputStream(sourceFile).use { input ->
+                    input.copyTo(out)
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                contentValues.clear()
+                contentValues.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                resolver.update(uri, contentValues, null, null)
+            }
+
+            Log.i(TAG, "Successfully exported to MediaStore: $uri")
+            return@withContext uri
+        } catch (e: Exception) {
+            Log.e(TAG, "Error saving to MediaStore", e)
+            null
+        }
+    }
+
+    /**
+     * Scans music files existing on the user's phone / MediaStore.
+     */
+    suspend fun scanDeviceMusic(context: Context): List<Track> = withContext(Dispatchers.IO) {
+        val tracks = mutableListOf<Track>()
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION,
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.Audio.Media.DATA
+        )
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+
+        try {
+            val cursor = context.contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                null,
+                "${MediaStore.Audio.Media.DATE_ADDED} DESC"
+            )
+
+            cursor?.use {
+                val idCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val albumCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
+                val durationCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                val sizeCol = it.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val dataCol = it.getColumnIndex(MediaStore.Audio.Media.DATA)
+
+                while (it.moveToNext()) {
+                    val mediaId = it.getLong(idCol)
+                    val title = it.getString(titleCol) ?: "Unknown Track"
+                    val artist = it.getString(artistCol) ?: "Unknown Artist"
+                    val album = it.getString(albumCol) ?: "Device Music"
+                    val duration = it.getLong(durationCol)
+                    val size = it.getLong(sizeCol)
+                    val path = if (dataCol >= 0) it.getString(dataCol) ?: "" else ""
+
+                    val contentUri = ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                        mediaId
+                    )
+
+                    tracks.add(
+                        Track(
+                            id = "device_$mediaId",
+                            title = title,
+                            artist = if (artist == "<unknown>") "Local Artist" else artist,
+                            album = album,
+                            durationMs = duration,
+                            sizeBytes = size,
+                            format = "MP3",
+                            filePath = path,
+                            uriString = contentUri.toString(),
+                            source = TrackSource.DEVICE_MUSIC,
+                            savedToDeviceMusic = true,
+                            storageStatus = StorageStatus.SAVED_MUSIC_FOLDER
+                        )
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error scanning device music", e)
+        }
+        tracks
+    }
+}

@@ -1,0 +1,402 @@
+package com.example.ui
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.ui.components.DownloadDialog
+import com.example.ui.components.FullPlayerDialog
+import com.example.ui.components.NowPlayingBar
+import com.example.ui.components.StorageBanner
+import com.example.ui.components.TrackCard
+import com.example.ui.components.YouTubeBrowserSheet
+import com.example.ui.theme.CreamBackground
+import com.example.ui.theme.InkDark
+import com.example.ui.theme.InkSoft
+import com.example.ui.theme.PeachPrimary
+import com.example.ui.theme.PeachSoft
+
+@Composable
+fun OgmApp(
+    viewModel: MainViewModel,
+    modifier: Modifier = Modifier
+) {
+    val tracks by viewModel.tracks.collectAsState()
+    val storageInfo by viewModel.storageInfo.collectAsState()
+    val playerState by viewModel.playerState.collectAsState()
+    val isDownloading by viewModel.isDownloading.collectAsState()
+    val downloadProgress by viewModel.downloadProgress.collectAsState()
+    val downloadStatus by viewModel.downloadStatus.collectAsState()
+    val showDownloadDialog by viewModel.showDownloadDialog.collectAsState()
+    val showYouTubeBrowser by viewModel.showYouTubeBrowser.collectAsState()
+    val showFullPlayer by viewModel.showFullPlayer.collectAsState()
+    val userMessage by viewModel.userMessage.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(userMessage) {
+        userMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearUserMessage()
+        }
+    }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetMultipleContents()
+    ) { uris: List<Uri> ->
+        uris.forEach { uri ->
+            viewModel.importLocalAudio(uri, null)
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = CreamBackground,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            AnimatedVisibility(
+                visible = playerState.currentTrack != null,
+                enter = slideInVertically { it } + fadeIn(),
+                exit = slideOutVertically { it } + fadeOut()
+            ) {
+                NowPlayingBar(
+                    playerState = playerState,
+                    onTogglePlayPause = { viewModel.player.togglePlayPause() },
+                    onNext = { viewModel.player.next() },
+                    onPrevious = { viewModel.player.previous() },
+                    onToggleShuffle = { viewModel.player.toggleShuffle() },
+                    onSeek = { viewModel.player.seekTo(it) },
+                    onBarClick = { viewModel.openFullPlayer() }
+                )
+            }
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .statusBarsPadding()
+        ) {
+            // Header (.app-header)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    // Brand Logo (.brand-logo: 46x46, border-radius 12px)
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .shadow(4.dp, RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(PeachPrimary),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_ogm_logo),
+                            contentDescription = "OGM Logo",
+                            modifier = Modifier.size(46.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column {
+                        Text(
+                            text = "OGM",
+                            fontSize = 21.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = InkDark,
+                            letterSpacing = 0.6.sp
+                        )
+                        Text(
+                            text = "Open Grace Music · your personal music space",
+                            fontSize = 11.8.sp,
+                            color = InkSoft
+                        )
+                    }
+                }
+
+                // YouTube In-App Browser Quick Button
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(PeachSoft)
+                        .clickable { viewModel.openYouTubeBrowser() }
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                        .testTag("youtube_browser_btn"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "YouTube ➔",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = PeachPrimary
+                    )
+                }
+            }
+
+            // Storage Banner (.storage-banner)
+            StorageBanner(
+                storageInfo = storageInfo,
+                modifier = Modifier.padding(horizontal = 18.dp, vertical = 2.dp)
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Action Buttons (.actions: ＋ Import audio files, 🔗 Import from URL)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Primary Pill: ＋ Import audio files
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .shadow(6.dp, RoundedCornerShape(999.dp), ambientColor = PeachPrimary, spotColor = PeachPrimary)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(PeachPrimary)
+                        .clickable { filePickerLauncher.launch("audio/*") }
+                        .padding(vertical = 12.dp)
+                        .testTag("importBtn"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "＋ Import audio files",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                }
+
+                // Ghost Pill: 🔗 Import from URL
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(999.dp))
+                        .border(2.dp, PeachPrimary, RoundedCornerShape(999.dp))
+                        .clickable { viewModel.openDownloadDialog() }
+                        .padding(vertical = 11.dp)
+                        .testTag("urlBtn"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🔗 Import from URL",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = PeachPrimary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Integrity Note (.integrity-note)
+            Text(
+                text = "Import audio you own or are licensed to use — your purchases, your own recordings, Creative Commons archives, or direct files you have rights to. Your library is saved on this device.",
+                fontSize = 12.sp,
+                color = InkSoft,
+                lineHeight = 17.sp,
+                modifier = Modifier.padding(horizontal = 18.dp)
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Library List or Empty State
+            if (tracks.isEmpty()) {
+                // Empty State (.empty-state)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp, vertical = 32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        // Empty Art (.empty-art: 92px circle, #FFE8D9, font-size 2.6rem color #EF8B57)
+                        Box(
+                            modifier = Modifier
+                                .size(92.dp)
+                                .clip(CircleShape)
+                                .background(PeachSoft),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "♪",
+                                fontSize = 42.sp,
+                                color = PeachPrimary,
+                                fontWeight = FontWeight.Normal
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Text(
+                            text = "Your library awaits",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = InkDark
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Convert and keep the music you own. Once saved, tracks play anytime — even offline. No accounts, no servers holding your library.",
+                            fontSize = 14.sp,
+                            color = InkSoft,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 22.sp,
+                            modifier = Modifier.padding(horizontal = 20.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Secondary action: Scan phone storage
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(999.dp))
+                                .background(PeachSoft)
+                                .clickable { viewModel.scanDeviceMusic() }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("scan_phone_btn"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Scan phone Music folder",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = PeachPrimary
+                            )
+                        }
+                    }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("trackGrid"),
+                    contentPadding = PaddingValues(horizontal = 18.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(tracks, key = { it.id }) { track ->
+                        val isPlayingThis = playerState.currentTrack?.id == track.id
+                        TrackCard(
+                            track = track,
+                            isPlayingThis = isPlayingThis,
+                            onPlayClick = { viewModel.playTrack(track) },
+                            onConvertToMp3 = {
+                                viewModel.startDownload(track.uriString, saveToMusicFolder = true, bitrateKbps = 192)
+                            },
+                            onSaveToMusicClick = { viewModel.saveTrackToDeviceMusic(track) },
+                            onDeleteClick = { viewModel.deleteTrack(track) }
+                        )
+                    }
+
+                    item {
+                        Spacer(modifier = Modifier.height(96.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    // URL / YouTube Download Dialog
+    if (showDownloadDialog) {
+        DownloadDialog(
+            isDownloading = isDownloading,
+            downloadProgress = downloadProgress,
+            downloadStatus = downloadStatus,
+            onDismiss = { viewModel.closeDownloadDialog() },
+            onStartDownload = { url, saveToMusic, bitrate ->
+                viewModel.startDownload(url, saveToMusic, bitrate)
+            },
+            onOpenYouTubeBrowser = {
+                viewModel.closeDownloadDialog()
+                viewModel.openYouTubeBrowser()
+            }
+        )
+    }
+
+    // YouTube Web Browser Sheet
+    if (showYouTubeBrowser) {
+        YouTubeBrowserSheet(
+            onClose = { viewModel.closeYouTubeBrowser() },
+            onConvertVideo = { videoUrl ->
+                viewModel.startDownload(videoUrl, saveToMusicFolder = true, bitrateKbps = 192)
+            }
+        )
+    }
+
+    // Full Screen Vinyl Player Dialog
+    if (showFullPlayer && playerState.currentTrack != null) {
+        FullPlayerDialog(
+            playerState = playerState,
+            onClose = { viewModel.closeFullPlayer() },
+            onTogglePlayPause = { viewModel.player.togglePlayPause() },
+            onNext = { viewModel.player.next() },
+            onPrevious = { viewModel.player.previous() },
+            onSeek = { viewModel.player.seekTo(it) },
+            onToggleShuffle = { viewModel.player.toggleShuffle() },
+            onCycleLoop = { viewModel.player.cycleLoopMode() },
+            onSetSpeed = { viewModel.player.setSpeed(it) },
+            onSaveToDeviceMusic = { viewModel.saveTrackToDeviceMusic(it) },
+            onSelectQueueItem = { viewModel.player.setQueueAndPlay(playerState.queue, it) }
+        )
+    }
+}
