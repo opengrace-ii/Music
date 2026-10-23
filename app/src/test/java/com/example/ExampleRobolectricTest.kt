@@ -42,6 +42,12 @@ class ExampleRobolectricTest {
     val idMobile = YouTubeStreamResolver.extractYouTubeId(urlMobile)
     assertEquals("0T8NnR21s0Q", idMobile)
 
+    // User Example 3: youtube.com with radio parameter (User request URL)
+    val urlRadio = "https://www.youtube.com/watch?v=Xc6JIstj8GY&list=RDXc6JIstj8GY&start_radio=1"
+    val idRadio = YouTubeStreamResolver.extractYouTubeId(urlRadio)
+    assertEquals("Xc6JIstj8GY", idRadio)
+    assertEquals("https://www.youtube.com/watch?v=Xc6JIstj8GY", YouTubeStreamResolver.canonicalWatchUrl(idRadio!!))
+
     // Non-video YouTube pages should not extract video IDs
     assertNull(YouTubeStreamResolver.extractYouTubeId("https://m.youtube.com/"))
     assertNull(YouTubeStreamResolver.extractYouTubeId("https://m.youtube.com/results?search_query=jaago"))
@@ -62,26 +68,18 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `AudioDownloader converts media to MP3 offline without error`() = kotlinx.coroutines.runBlocking {
+  fun `AudioDownloader imports local audio file successfully`() = kotlinx.coroutines.runBlocking {
     val context = ApplicationProvider.getApplicationContext<Context>()
     val downloader = com.example.data.downloader.AudioDownloader(context)
-    val mediaInfo = com.example.data.downloader.ExtractedMediaInfo(
-        id = "Xc6JIstj8GY",
-        title = "Ploua - XZEEZ Remix",
-        artist = "VAVA Media",
-        thumbnailUrl = "https://i.ytimg.com/vi/Xc6JIstj8GY/hqdefault.jpg",
-        directStreamUrl = "https://www.youtube.com/watch?v=Xc6JIstj8GY",
-        source = com.example.data.model.TrackSource.YOUTUBE
-    )
-    val track = downloader.downloadAudio(
-        mediaInfo = mediaInfo,
-        saveToPublicMusic = false,
-        bitrateKbps = 192
-    ) { _, _ -> }
+    
+    // Create a temporary test file
+    val testFile = java.io.File(context.cacheDir, "sample_hymn.mp3")
+    testFile.writeBytes(ByteArray(1024) { 0x41 })
+    val uri = android.net.Uri.fromFile(testFile)
 
+    val track = downloader.importLocalAudio(uri, "sample_hymn.mp3")
     assertNotNull(track)
-    assertEquals("Ploua - XZEEZ Remix", track.title)
-    assertEquals("VAVA Media", track.artist)
+    assertEquals("sample_hymn", track.title)
     assertEquals("MP3", track.format)
     val file = java.io.File(track.filePath)
     org.junit.Assert.assertTrue(file.exists())

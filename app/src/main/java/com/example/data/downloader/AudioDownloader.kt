@@ -13,14 +13,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-
-class YouTubePlayerRequiredException(message: String) : Exception(message)
 
 data class ExtractedMediaInfo(
     val id: String,
@@ -36,33 +35,13 @@ class AudioDownloader(private val context: Context) {
     companion object {
         private const val TAG = "AudioDownloader"
 
-        // Helper delegating to YouTubeStreamResolver for compatibility
+        // Helper delegating to YouTubeStreamResolver
         fun extractYouTubeId(url: String?): String? = YouTubeStreamResolver.extractYouTubeId(url)
-
-        // Royalty-free demo tracks for offline initial state
-        val DEMO_TRACKS = listOf(
-            ExtractedMediaInfo(
-                id = "demo_ambient_grace",
-                title = "Graceful Ambient Sunrise",
-                artist = "Open Grace Project",
-                thumbnailUrl = "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
-                directStreamUrl = "https://archive.org/download/testmp3testfile/mpthreetest.mp3",
-                source = TrackSource.DIRECT_URL
-            ),
-            ExtractedMediaInfo(
-                id = "demo_acoustic_hymn",
-                title = "Peaceful Acoustic Grace",
-                artist = "Acoustic Worship",
-                thumbnailUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
-                directStreamUrl = "https://archive.org/download/testmp3testfile/mpthreetest.mp3",
-                source = TrackSource.DIRECT_URL
-            )
-        )
     }
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(90, TimeUnit.SECONDS)
         .followRedirects(true)
         .build()
 
@@ -136,7 +115,7 @@ class AudioDownloader(private val context: Context) {
     }
 
     /**
-     * Downloads or converts the audio track with progress updates and exports to system Music folder.
+     * Downloads authentic audio stream with progress updates and exports to system Music folder.
      */
     suspend fun downloadAudio(
         mediaInfo: ExtractedMediaInfo,
@@ -153,21 +132,18 @@ class AudioDownloader(private val context: Context) {
         if (!musicDir.exists()) musicDir.mkdirs()
 
         val cleanTitle = mediaInfo.title.replace("[^a-zA-Z0-9._ -]".toRegex(), "").trim().ifEmpty { "track" }
-        var targetFile = File(musicDir, "${cleanTitle}_${System.currentTimeMillis()}.mp3")
-        var formatName = "MP3"
-        var contentType = "audio/mpeg"
-        var downloadedSuccessfully = false
 
         var resolvedStreamUrl = capturedStreamUrl
         var effectiveHeaders = streamHeaders ?: emptyMap()
         var effectiveCookies: String? = null
 
-        // 1. If YouTube track and no stream captured yet, attempt background resolution
+        // 1. If YouTube track and no stream captured yet, resolve via background resolver
         if (mediaInfo.source == TrackSource.YOUTUBE && resolvedStreamUrl.isNullOrEmpty()) {
-            onProgress(0.15f, "Checking live stream availability...")
+            onProgress(0.18f, "Resolving authentic audio stream from YouTube...")
             val resolved = runCatching {
                 YouTubeStreamResolver.resolveStreamInBackground(context, mediaInfo.id)
             }.getOrNull()
+
             if (resolved != null) {
                 resolvedStreamUrl = resolved.streamUrl
                 effectiveHeaders = resolved.headers
@@ -175,136 +151,90 @@ class AudioDownloader(private val context: Context) {
             }
         }
 
-        val directUrl = resolvedStreamUrl ?: if (mediaInfo.source == TrackSource.DIRECT_URL) mediaInfo.directStreamUrl else null
+        val streamUrl = resolvedStreamUrl ?: if (mediaInfo.source == TrackSource.DIRECT_URL) mediaInfo.directStreamUrl else null
 
-        // 2. Try streaming from direct or resolved URL if present
-        if (!directUrl.isNullOrEmpty()) {
-            try {
-                onProgress(0.25f, "Downloading audio stream...")
-                val reqBuilder = Request.Builder()
-                    .url(directUrl)
-                    .header("User-Agent", YouTubeStreamResolver.DEFAULT_USER_AGENT)
-                    .header("Accept", "*/*")
-                    .header("Accept-Language", "en-US,en;q=0.9")
-
-                if (mediaInfo.source == TrackSource.YOUTUBE) {
-                    reqBuilder.header("Referer", "https://m.youtube.com/")
-                    reqBuilder.header("Origin", "https://m.youtube.com")
-                }
-
-                effectiveHeaders.forEach { (k, v) ->
-                    if (!k.equals("Host", ignoreCase = true) &&
-                        !k.equals("User-Agent", ignoreCase = true) &&
-                        !k.equals("Content-Length", ignoreCase = true)
-                    ) {
-                        reqBuilder.header(k, v)
-                    }
-                }
-
-                val cookies = effectiveCookies ?: try {
-                    CookieManager.getInstance().getCookie(directUrl)
-                } catch (_: Exception) { null }
-                if (!cookies.isNullOrEmpty()) {
-                    reqBuilder.header("Cookie", cookies)
-                }
-
-                val response = client.newCall(reqBuilder.build()).execute()
-                if (response.isSuccessful && response.body != null) {
-                    val streamContentType = response.header("Content-Type", "audio/mpeg")?.lowercase() ?: "audio/mpeg"
-                    val extension = when {
-                        streamContentType.contains("webm") || streamContentType.contains("opus") -> "webm"
-                        streamContentType.contains("mp4") || streamContentType.contains("m4a") -> "m4a"
-                        streamContentType.contains("ogg") -> "ogg"
-                        streamContentType.contains("wav") -> "wav"
-                        else -> "mp3"
-                    }
-                    val streamFile = File(musicDir, "${cleanTitle}_${System.currentTimeMillis()}.$extension")
-
-                    val body = response.body!!
-                    val contentLength = body.contentLength()
-                    body.byteStream().use { input ->
-                        FileOutputStream(streamFile).use { output ->
-                            val buffer = ByteArray(8192)
-                            var bytesRead: Int
-                            var totalBytesRead = 0L
-                            while (input.read(buffer).also { bytesRead = it } != -1) {
-                                output.write(buffer, 0, bytesRead)
-                                totalBytesRead += bytesRead
-                                val progress = if (contentLength > 0) {
-                                    0.25f + (totalBytesRead.toFloat() / contentLength.toFloat()) * 0.55f
-                                } else {
-                                    0.55f
-                                }
-                                val mb = String.format("%.1f MB", totalBytesRead / 1_000_000.0)
-                                onProgress(progress, "Downloading: $mb ($extension)")
-                            }
-                        }
-                    }
-                    if (streamFile.length() > 50_000) {
-                        targetFile = streamFile
-                        formatName = extension.uppercase()
-                        contentType = streamContentType
-                        downloadedSuccessfully = true
-                    }
-                } else {
-                    Log.w(TAG, "Stream response code: ${response.code}")
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Live stream download error: ${e.message}")
-            }
+        if (streamUrl.isNullOrEmpty()) {
+            throw IllegalStateException(
+                "Could not extract audio stream for \"${mediaInfo.title}\". Please open the video in the YouTube browser and tap Save MP3."
+            )
         }
 
-        // 3. Fallback: Infallible conversion pipeline
-        // If live stream was restricted by 403 or unavailable, convert and package
-        // the track directly using the bundled high-fidelity 256kbps MP3 audio asset
-        if (!downloadedSuccessfully) {
-            onProgress(0.50f, "Converting media to high-fidelity MP3...")
-            targetFile = File(musicDir, "${cleanTitle}_${System.currentTimeMillis()}.mp3")
-            formatName = "MP3"
-            contentType = "audio/mpeg"
+        onProgress(0.30f, "Downloading authentic audio stream...")
 
-            var copied = false
-            try {
-                context.assets.open("grace_template.mp3").use { input ->
-                    FileOutputStream(targetFile).use { output ->
-                        val buffer = ByteArray(8192)
-                        var bytes: Int
-                        var written = 0L
-                        val estimatedSize = 5_800_000L
-                        while (input.read(buffer).also { bytes = it } != -1) {
-                            output.write(buffer, 0, bytes)
-                            written += bytes
-                            val p = 0.50f + (written.toFloat() / estimatedSize.toFloat()) * 0.35f
-                            onProgress(p.coerceAtMost(0.85f), "Writing MP3: ${String.format("%.1f MB", written / 1_000_000.0)}")
-                        }
-                    }
-                }
-                copied = targetFile.length() > 0
-            } catch (e: Exception) {
-                Log.w(TAG, "Error copying from assets: ${e.message}")
-            }
+        var extension = "mp3"
+        var contentType = "audio/mpeg"
+        var targetFile = File(musicDir, "${cleanTitle}_${System.currentTimeMillis()}.$extension")
 
-            if (!copied) {
-                // Secondary fallback from demo online source
-                onProgress(0.60f, "Fetching verified audio source...")
-                try {
-                    val fallbackReq = Request.Builder()
-                        .url(DEMO_TRACKS[0].directStreamUrl)
-                        .build()
-                    client.newCall(fallbackReq).execute().use { resp ->
-                        resp.body?.byteStream()?.use { input ->
-                            FileOutputStream(targetFile).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Secondary fallback failed: ${e.message}")
-                }
+        val cookies = effectiveCookies ?: try {
+            CookieManager.getInstance().getCookie("https://m.youtube.com")
+                ?: CookieManager.getInstance().getCookie("https://www.youtube.com")
+        } catch (_: Exception) { null }
+
+        var downloadSuccess = false
+
+        // Attempt A: Try with Range: bytes=0- on stripped query param if range exists
+        if (streamUrl.contains("googlevideo.com")) {
+            val strippedUrl = streamUrl
+                .replace("&range=\\d+-\\d+".toRegex(), "")
+                .replace("\\?range=\\d+-\\d+&".toRegex(), "?")
+                .replace("\\?range=\\d+-\\d+".toRegex(), "")
+
+            downloadSuccess = executeStreamDownload(
+                url = strippedUrl,
+                musicDir = musicDir,
+                cleanTitle = cleanTitle,
+                cookies = cookies,
+                isYouTube = true,
+                onSuccess = { file, ext, type ->
+                    targetFile = file
+                    extension = ext
+                    contentType = type
+                },
+                onProgress = onProgress
+            )
+
+            // Attempt B: If stripped URL returned 403 or failed, try raw streamUrl with range header
+            if (!downloadSuccess) {
+                Log.d(TAG, "Stripped URL download failed, retrying with raw streamUrl")
+                onProgress(0.35f, "Re-negotiating audio connection...")
+                downloadSuccess = executeStreamDownload(
+                    url = streamUrl,
+                    musicDir = musicDir,
+                    cleanTitle = cleanTitle,
+                    cookies = cookies,
+                    isYouTube = true,
+                    onSuccess = { file, ext, type ->
+                        targetFile = file
+                        extension = ext
+                        contentType = type
+                    },
+                    onProgress = onProgress
+                )
             }
+        } else {
+            // Direct audio URL
+            downloadSuccess = executeStreamDownload(
+                url = streamUrl,
+                musicDir = musicDir,
+                cleanTitle = cleanTitle,
+                cookies = cookies,
+                isYouTube = false,
+                onSuccess = { file, ext, type ->
+                    targetFile = file
+                    extension = ext
+                    contentType = type
+                },
+                onProgress = onProgress
+            )
         }
 
-        onProgress(0.88f, "Verifying audio & reading duration...")
+        if (!downloadSuccess || !targetFile.exists() || targetFile.length() < 20_000) {
+            throw IllegalStateException(
+                "Audio download could not be completed for \"${mediaInfo.title}\". Please verify your internet connection."
+            )
+        }
+
+        onProgress(0.88f, "Verifying audio stream & duration...")
         var durationMs = 0L
         try {
             val mmr = MediaMetadataRetriever()
@@ -335,7 +265,7 @@ class AudioDownloader(private val context: Context) {
             }
         }
 
-        onProgress(1.0f, "Completed & verified offline ✓")
+        onProgress(1.0f, "Completed & saved offline ✓")
 
         Track(
             id = UUID.randomUUID().toString(),
@@ -344,7 +274,7 @@ class AudioDownloader(private val context: Context) {
             album = "Open Grace Music",
             durationMs = durationMs,
             sizeBytes = targetFile.length(),
-            format = formatName,
+            format = extension.uppercase(),
             filePath = targetFile.absolutePath,
             uriString = publicUriString,
             source = mediaInfo.source,
@@ -354,6 +284,81 @@ class AudioDownloader(private val context: Context) {
             bitrateKbps = bitrateKbps,
             addedAt = System.currentTimeMillis()
         )
+    }
+
+    private fun executeStreamDownload(
+        url: String,
+        musicDir: File,
+        cleanTitle: String,
+        cookies: String?,
+        isYouTube: Boolean,
+        onSuccess: (File, String, String) -> Unit,
+        onProgress: (Float, String) -> Unit
+    ): Boolean {
+        try {
+            val reqBuilder = Request.Builder()
+                .url(url)
+                .header("User-Agent", YouTubeStreamResolver.DEFAULT_USER_AGENT)
+                .header("Accept", "*/*")
+                .header("Accept-Language", "en-US,en;q=0.9")
+
+            if (isYouTube) {
+                reqBuilder.header("Referer", "https://m.youtube.com/")
+                reqBuilder.header("Origin", "https://m.youtube.com")
+                reqBuilder.header("Range", "bytes=0-")
+            }
+
+            if (!cookies.isNullOrEmpty()) {
+                reqBuilder.header("Cookie", cookies)
+            }
+
+            val response: Response = client.newCall(reqBuilder.build()).execute()
+            if (!response.isSuccessful || response.body == null) {
+                Log.w(TAG, "Stream response unsuccessful: code=${response.code}")
+                return false
+            }
+
+            val streamContentType = response.header("Content-Type", "audio/mpeg")?.lowercase() ?: "audio/mpeg"
+            val extension = when {
+                streamContentType.contains("webm") || streamContentType.contains("opus") -> "webm"
+                streamContentType.contains("mp4") || streamContentType.contains("m4a") -> "m4a"
+                streamContentType.contains("ogg") -> "ogg"
+                streamContentType.contains("wav") -> "wav"
+                else -> "mp3"
+            }
+            val streamFile = File(musicDir, "${cleanTitle}_${System.currentTimeMillis()}.$extension")
+
+            val body = response.body!!
+            val contentLength = body.contentLength()
+            body.byteStream().use { input ->
+                FileOutputStream(streamFile).use { output ->
+                    val buffer = ByteArray(16384)
+                    var bytesRead: Int
+                    var totalBytesRead = 0L
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        output.write(buffer, 0, bytesRead)
+                        totalBytesRead += bytesRead
+                        val p = if (contentLength > 0) {
+                            0.30f + (totalBytesRead.toFloat() / contentLength.toFloat()) * 0.55f
+                        } else {
+                            0.60f
+                        }
+                        val mb = String.format("%.1f MB", totalBytesRead / 1_000_000.0)
+                        onProgress(p.coerceAtMost(0.87f), "Downloading: $mb ($extension)")
+                    }
+                }
+            }
+
+            if (streamFile.length() > 30_000) {
+                onSuccess(streamFile, extension, streamContentType)
+                return true
+            } else {
+                Log.w(TAG, "File too small: ${streamFile.length()} bytes")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "executeStreamDownload error: ${e.message}")
+        }
+        return false
     }
 
     /**

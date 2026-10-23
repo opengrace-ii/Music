@@ -37,11 +37,19 @@ object DeviceMusicHelper {
     ): Uri? = withContext(Dispatchers.IO) {
         try {
             val resolver = context.contentResolver
-            val displayName = if (title.endsWith(".mp3", ignoreCase = true)) title else "$title.mp3"
+            val ext = when {
+                mimeType.contains("mp4") || mimeType.contains("m4a") -> "m4a"
+                mimeType.contains("webm") || mimeType.contains("opus") -> "webm"
+                mimeType.contains("ogg") -> "ogg"
+                mimeType.contains("wav") -> "wav"
+                else -> "mp3"
+            }
+            val cleanBase = title.replace("\\.[a-zA-Z0-9]+$".toRegex(), "").trim().ifEmpty { "track" }
+            val displayName = "$cleanBase.$ext"
 
             val contentValues = ContentValues().apply {
                 put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
-                put(MediaStore.Audio.Media.TITLE, title.replace(".mp3", ""))
+                put(MediaStore.Audio.Media.TITLE, cleanBase)
                 put(MediaStore.Audio.Media.ARTIST, artist)
                 put(MediaStore.Audio.Media.ALBUM, album)
                 put(MediaStore.Audio.Media.MIME_TYPE, mimeType)

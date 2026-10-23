@@ -385,8 +385,8 @@ fun OgmApp(
             downloadStatus = downloadStatus,
             initialUrl = prefilledUrl,
             onDismiss = { viewModel.closeDownloadDialog() },
-            onStartDownload = { url, saveToMusic, bitrate ->
-                viewModel.startDownload(url, saveToMusic, bitrate)
+            onStartDownload = { url, saveToMusic, bitrate, capturedStream, capturedHeaders ->
+                viewModel.startDownload(url, saveToMusic, bitrate, capturedStream, capturedHeaders)
             },
             onOpenYouTubeBrowser = { targetUrl ->
                 viewModel.closeDownloadDialog()

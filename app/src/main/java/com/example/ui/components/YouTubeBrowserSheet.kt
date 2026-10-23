@@ -113,6 +113,22 @@ fun YouTubeBrowserSheet(
     var capturedStreamUrl by remember { mutableStateOf<String?>(null) }
     var capturedHeaders by remember { mutableStateOf<Map<String, String>?>(null) }
 
+    fun processUrl(url: String) {
+        currentUrl = url
+        val id = YouTubeStreamResolver.extractYouTubeId(url)
+        if (id != null) {
+            if (id != detectedVideoId) {
+                detectedVideoId = id
+                capturedStreamUrl = null
+                capturedHeaders = null
+            }
+        } else if (url.contains("/results") || url.endsWith("youtube.com/") || url.contains("m.youtube.com/?")) {
+            detectedVideoId = null
+            capturedStreamUrl = null
+            capturedHeaders = null
+        }
+    }
+
     fun copyCurrentVideoUrl() {
         if (detectedVideoId != null) {
             val cleanUrl = YouTubeStreamResolver.canonicalWatchUrl(detectedVideoId!!)
@@ -121,7 +137,7 @@ fun YouTubeBrowserSheet(
             clipboard.setPrimaryClip(clip)
             Toast.makeText(context, "✓ Copied YouTube link:\n$cleanUrl", Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(context, "Please tap on a video to play and copy its link", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Please open and play a video first to copy its link", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -219,7 +235,7 @@ fun YouTubeBrowserSheet(
                         }
                     }
 
-                    // Direct Copy Button with high visibility
+                    // Direct Copy Button
                     IconButton(
                         onClick = { copyCurrentVideoUrl() },
                         modifier = Modifier.testTag("copy_yt_url_btn")
@@ -257,7 +273,7 @@ fun YouTubeBrowserSheet(
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Save", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = OnSageGreen)
+                            Text("Save MP3", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = OnSageGreen)
                         }
                     }
                 }
@@ -282,6 +298,11 @@ fun YouTubeBrowserSheet(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
                                 )
+
+                                val cookieManager = CookieManager.getInstance()
+                                cookieManager.setAcceptCookie(true)
+                                cookieManager.setAcceptThirdPartyCookies(this, true)
+
                                 settings.apply {
                                     javaScriptEnabled = true
                                     domStorageEnabled = true
@@ -294,13 +315,7 @@ fun YouTubeBrowserSheet(
                                     WebAppBridge { url, title ->
                                         post {
                                             if (url.isNotBlank()) {
-                                                currentUrl = url
-                                                val id = YouTubeStreamResolver.extractYouTubeId(url)
-                                                if (id != null && id != detectedVideoId) {
-                                                    detectedVideoId = id
-                                                    capturedStreamUrl = null
-                                                    capturedHeaders = null
-                                                }
+                                                processUrl(url)
                                             }
                                             if (title.isNotBlank() && !title.equals("YouTube", ignoreCase = true)) {
                                                 currentTitle = title
@@ -311,71 +326,64 @@ fun YouTubeBrowserSheet(
                                 )
 
                                 webViewClient = object : WebViewClient() {
+                                    override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                                        super.doUpdateVisitedHistory(view, url, isReload)
+                                        url?.let { processUrl(it) }
+                                    }
+
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                        url?.let {
-                                            currentUrl = it
-                                            val id = YouTubeStreamResolver.extractYouTubeId(it)
-                                            if (id != null) {
-                                                if (id != detectedVideoId) {
-                                                    detectedVideoId = id
-                                                    capturedStreamUrl = null
-                                                    capturedHeaders = null
-                                                }
-                                            } else if (it.contains("/results") || it.endsWith("youtube.com/") || it.contains("m.youtube.com/?")) {
-                                                detectedVideoId = null
-                                                capturedStreamUrl = null
-                                                capturedHeaders = null
-                                            }
-                                        }
+                                        url?.let { processUrl(it) }
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
-                                        url?.let {
-                                            currentUrl = it
-                                            val id = YouTubeStreamResolver.extractYouTubeId(it)
-                                            if (id != null && id != detectedVideoId) {
-                                                detectedVideoId = id
-                                                capturedStreamUrl = null
-                                                capturedHeaders = null
-                                            }
-                                        }
+                                        url?.let { processUrl(it) }
                                         view?.title?.let {
                                             if (it.isNotBlank() && !it.equals("YouTube", ignoreCase = true)) {
                                                 currentTitle = it
                                             }
                                         }
 
-                                        // Inject SPA navigation listener for YouTube mobile
+                                        // Inject SPA navigation and player observer
                                         view?.evaluateJavascript(
                                             """
                                             (function() {
                                                 if (window._ogmBridgeAttached) return;
                                                 window._ogmBridgeAttached = true;
-                                                function notify() {
+
+                                                function checkAndUpdate() {
                                                     var href = window.location.href;
                                                     var t = document.title;
-                                                    var canonical = document.querySelector('link[rel="canonical"]');
-                                                    if (canonical && canonical.href && canonical.href.indexOf('watch?v=') !== -1) {
-                                                        href = canonical.href;
-                                                    }
+
+                                                    try {
+                                                        var pr = window.ytInitialPlayerResponse;
+                                                        if (pr && pr.videoDetails && pr.videoDetails.videoId) {
+                                                            href = 'https://www.youtube.com/watch?v=' + pr.videoDetails.videoId;
+                                                            if (pr.videoDetails.title) t = pr.videoDetails.title;
+                                                        }
+                                                    } catch(e) {}
+
                                                     if (window.AndroidBridge) {
                                                         window.AndroidBridge.reportUrl(href, t);
                                                     }
                                                 }
-                                                window.addEventListener('yt-navigate-finish', notify);
-                                                window.addEventListener('yt-page-data-updated', notify);
-                                                window.addEventListener('popstate', notify);
+
+                                                window.addEventListener('yt-navigate-finish', checkAndUpdate);
+                                                window.addEventListener('yt-page-data-updated', checkAndUpdate);
+                                                window.addEventListener('popstate', checkAndUpdate);
+
                                                 var origPush = history.pushState;
                                                 history.pushState = function() {
                                                     origPush.apply(this, arguments);
-                                                    setTimeout(notify, 100);
+                                                    setTimeout(checkAndUpdate, 150);
                                                 };
+
                                                 var origRepl = history.replaceState;
                                                 history.replaceState = function() {
                                                     origRepl.apply(this, arguments);
-                                                    setTimeout(notify, 100);
+                                                    setTimeout(checkAndUpdate, 150);
                                                 };
-                                                setInterval(notify, 600);
+
+                                                setInterval(checkAndUpdate, 800);
                                             })();
                                             """.trimIndent(),
                                             null
@@ -388,13 +396,14 @@ fun YouTubeBrowserSheet(
                                     ): WebResourceResponse? {
                                         val reqUrl = request?.url?.toString() ?: ""
                                         if (reqUrl.contains("googlevideo.com/videoplayback") &&
-                                            (reqUrl.contains("mime=audio") || reqUrl.contains("audio/"))
+                                            (reqUrl.contains("mime=audio") ||
+                                             reqUrl.contains("audio%2F") ||
+                                             reqUrl.contains("itag=140") ||
+                                             reqUrl.contains("itag=251") ||
+                                             reqUrl.contains("itag=171"))
                                         ) {
-                                            val currentId = detectedVideoId
-                                            if (currentId != null && (reqUrl.contains(currentId) || reqUrl.contains("docid=$currentId"))) {
-                                                capturedStreamUrl = YouTubeStreamResolver.prepareFullStreamUrl(reqUrl)
-                                                capturedHeaders = request?.requestHeaders
-                                            }
+                                            capturedStreamUrl = reqUrl
+                                            capturedHeaders = request?.requestHeaders
                                         }
                                         return super.shouldInterceptRequest(view, request)
                                     }

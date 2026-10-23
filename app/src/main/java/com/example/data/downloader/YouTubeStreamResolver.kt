@@ -1,11 +1,13 @@
 package com.example.data.downloader
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
@@ -23,15 +25,23 @@ data class ResolvedStream(
     val cookies: String? = null
 )
 
+class StreamResolverBridge(private val onStream: (String) -> Unit) {
+    @JavascriptInterface
+    fun onAudioFound(url: String) {
+        if (url.isNotBlank()) {
+            onStream(url)
+        }
+    }
+}
+
 object YouTubeStreamResolver {
     private const val TAG = "YouTubeStreamResolver"
 
     const val DEFAULT_USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+        "Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
 
     private val YT_PATTERNS = listOf(
-        Pattern.compile("(?:youtu\\.be\\/|v\\/|u\\/\\w\\/|embed\\/|shorts\\/)([^#\\&\\?]{11})"),
-        Pattern.compile("[\\?&]v=([^#\\&\\?]{11})"),
+        Pattern.compile("(?:youtu\\.be\\/|v\\/|u\\/\\w\\/|embed\\/|shorts\\/|watch\\?v=|[\\?&]v=)([^#\\&\\?]{11})"),
         Pattern.compile("^([^#\\&\\?]{11})$")
     )
 
@@ -41,6 +51,7 @@ object YouTubeStreamResolver {
      * - https://www.youtube.com/watch?v=Xc6JIstj8GY&list=RDXc6JIstj8GY&index=1
      * - https://m.youtube.com/watch?v=0T8NnR21s0Q
      * - https://www.youtube.com/shorts/0T8NnR21s0Q
+     * - https://music.youtube.com/watch?v=0T8NnR21s0Q
      */
     fun extractYouTubeId(rawUrl: String?): String? {
         if (rawUrl.isNullOrBlank()) return null
@@ -61,20 +72,18 @@ object YouTubeStreamResolver {
                 if (id.length == 11) return id
             }
 
-            // youtube.com variants
-            if (host.contains("youtube.com")) {
+            // youtube.com / youtube-nocookie.com variants
+            if (host.contains("youtube.com") || host.contains("youtube-nocookie.com")) {
                 val path = uri.path ?: ""
                 val vParam = uri.getQueryParameter("v")
                 if (!vParam.isNullOrBlank() && vParam.length == 11) {
                     return vParam
                 }
-                if (path.contains("/shorts/")) {
-                    val id = path.substringAfter("/shorts/").substringBefore('/').substringBefore('?')
-                    if (id.length == 11) return id
-                }
-                if (path.contains("/embed/")) {
-                    val id = path.substringAfter("/embed/").substringBefore('/').substringBefore('?')
-                    if (id.length == 11) return id
+                for (prefix in listOf("/shorts/", "/embed/", "/v/", "/live/")) {
+                    if (path.contains(prefix)) {
+                        val id = path.substringAfter(prefix).substringBefore('/').substringBefore('?')
+                        if (id.length == 11) return id
+                    }
                 }
             }
         } catch (_: Exception) {}
@@ -99,7 +108,7 @@ object YouTubeStreamResolver {
     fun canonicalWatchUrl(videoId: String): String = "https://www.youtube.com/watch?v=$videoId"
 
     /**
-     * Strips chunked range query parameters so Google Video can stream the full file from 0 to EOF.
+     * Strips chunked range query parameters if present.
      */
     fun prepareFullStreamUrl(streamUrl: String): String {
         return streamUrl
@@ -109,13 +118,14 @@ object YouTubeStreamResolver {
     }
 
     /**
-     * Attempts to resolve the direct Google Video audio stream by launching a headless background
-     * WebView and intercepting the audio playback request.
+     * Attempts to resolve the direct Google Video audio stream by launching a dedicated
+     * background WebView loading the mobile watch page and intercepting the audio playback request.
      */
+    @SuppressLint("SetJavaScriptEnabled")
     suspend fun resolveStreamInBackground(
         context: Context,
         videoId: String,
-        timeoutMs: Long = 5000
+        timeoutMs: Long = 14000
     ): ResolvedStream? = withContext(Dispatchers.Main) {
         suspendCancellableCoroutine { cont ->
             var finished = false
@@ -154,6 +164,12 @@ object YouTubeStreamResolver {
             try {
                 val wv = WebView(context)
                 webView = wv
+
+                CookieManager.getInstance().apply {
+                    setAcceptCookie(true)
+                    setAcceptThirdPartyCookies(wv, true)
+                }
+
                 wv.settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
@@ -162,6 +178,25 @@ object YouTubeStreamResolver {
                     userAgentString = DEFAULT_USER_AGENT
                 }
 
+                wv.addJavascriptInterface(
+                    StreamResolverBridge { directUrl ->
+                        handler.removeCallbacks(timeoutRunnable)
+                        val cookies = try {
+                            CookieManager.getInstance().getCookie("https://m.youtube.com")
+                                ?: CookieManager.getInstance().getCookie("https://www.youtube.com")
+                        } catch (_: Exception) { null }
+
+                        wv.post {
+                            complete(ResolvedStream(
+                                streamUrl = directUrl,
+                                headers = emptyMap(),
+                                cookies = cookies
+                            ))
+                        }
+                    },
+                    "AndroidBridge"
+                )
+
                 wv.webViewClient = object : WebViewClient() {
                     override fun shouldInterceptRequest(
                         view: WebView?,
@@ -169,17 +204,25 @@ object YouTubeStreamResolver {
                     ): WebResourceResponse? {
                         val reqUrl = request?.url?.toString() ?: ""
                         if (reqUrl.contains("googlevideo.com/videoplayback") &&
-                            (reqUrl.contains("mime=audio") || reqUrl.contains("audio/"))
+                            (reqUrl.contains("mime=audio") ||
+                             reqUrl.contains("audio%2F") ||
+                             reqUrl.contains("audio/") ||
+                             reqUrl.contains("itag=140") ||
+                             reqUrl.contains("itag=251") ||
+                             reqUrl.contains("itag=171") ||
+                             reqUrl.contains("itag=249") ||
+                             reqUrl.contains("itag=250"))
                         ) {
                             val headers = request?.requestHeaders ?: emptyMap()
                             val cookies = try {
-                                CookieManager.getInstance().getCookie(reqUrl)
+                                CookieManager.getInstance().getCookie("https://m.youtube.com")
+                                    ?: CookieManager.getInstance().getCookie("https://www.youtube.com")
                             } catch (_: Exception) { null }
 
                             handler.removeCallbacks(timeoutRunnable)
                             view?.post {
                                 complete(ResolvedStream(
-                                    streamUrl = prepareFullStreamUrl(reqUrl),
+                                    streamUrl = reqUrl,
                                     headers = headers,
                                     cookies = cookies
                                 ))
@@ -193,11 +236,31 @@ object YouTubeStreamResolver {
                         view?.evaluateJavascript(
                             """
                             (function() {
-                                var v = document.querySelector('video');
-                                if (v) {
-                                    v.muted = true;
-                                    v.play();
-                                }
+                                try {
+                                    var pr = window.ytInitialPlayerResponse;
+                                    if (pr && pr.streamingData && pr.streamingData.adaptiveFormats) {
+                                        for (var i = 0; i < pr.streamingData.adaptiveFormats.length; i++) {
+                                            var f = pr.streamingData.adaptiveFormats[i];
+                                            if ((f.mimeType && f.mimeType.indexOf('audio') !== -1) || f.itag === 140 || f.itag === 251) {
+                                                if (f.url) {
+                                                    window.AndroidBridge.onAudioFound(f.url);
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch(e) {}
+                                try {
+                                    var v = document.querySelector('video');
+                                    if (v) {
+                                        v.muted = true;
+                                        v.play();
+                                    }
+                                    var btn = document.querySelector('.ytp-play-button') ||
+                                              document.querySelector('button.player-control-play-pause-icon') ||
+                                              document.querySelector('.video-stream');
+                                    if (btn) btn.click();
+                                } catch(e) {}
                             })();
                             """.trimIndent(),
                             null
@@ -205,9 +268,10 @@ object YouTubeStreamResolver {
                     }
                 }
 
-                wv.loadUrl("https://www.youtube.com/embed/$videoId?autoplay=1&enablejsapi=1")
+                // Load the genuine mobile watch page
+                wv.loadUrl("https://m.youtube.com/watch?v=$videoId")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize headless WebView resolver", e)
+                Log.e(TAG, "Failed to initialize WebView resolver", e)
                 handler.removeCallbacks(timeoutRunnable)
                 complete(null)
             }
